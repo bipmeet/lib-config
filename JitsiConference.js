@@ -1,7 +1,7 @@
-/* global __filename, $, Promise */
+/* global $ */
 
+import { getLogger } from '@jitsi/logger';
 import EventEmitter from 'events';
-import { getLogger } from 'jitsi-meet-logger';
 import isEqual from 'lodash.isequal';
 import { Strophe } from 'strophe.js';
 
@@ -31,6 +31,7 @@ import VADTalkMutedDetection from './modules/detection/VADTalkMutedDetection';
 import { E2EEncryption } from './modules/e2ee/E2EEncryption';
 import E2ePing from './modules/e2eping/e2eping';
 import Jvb121EventGenerator from './modules/event/Jvb121EventGenerator';
+import FeatureFlags from './modules/flags/FeatureFlags';
 import { ReceiveVideoController } from './modules/qualitycontrol/ReceiveVideoController';
 import { SendVideoController } from './modules/qualitycontrol/SendVideoController';
 import RecordingManager from './modules/recording/RecordingManager';
@@ -45,6 +46,7 @@ import RandomUtil from './modules/util/RandomUtil';
 import ComponentsVersions from './modules/version/ComponentsVersions';
 import VideoSIPGW from './modules/videosipgw/VideoSIPGW';
 import * as VideoSIPGWConstants from './modules/videosipgw/VideoSIPGWConstants';
+import SignalingLayerImpl from './modules/xmpp/SignalingLayerImpl';
 import {
     FEATURE_E2EE,
     FEATURE_JIGASI,
@@ -53,6 +55,8 @@ import {
 import BridgeVideoType from './service/RTC/BridgeVideoType';
 import CodecMimeType from './service/RTC/CodecMimeType';
 import * as MediaType from './service/RTC/MediaType';
+import RTCEvents from './service/RTC/RTCEvents';
+import { getSourceNameForJitsiTrack } from './service/RTC/SignalingLayer';
 import VideoType from './service/RTC/VideoType';
 import {
     ACTION_JINGLE_RESTART,
@@ -118,7 +122,7 @@ const JINGLE_SI_TIMEOUT = 5000;
  *       and so on...
  */
 export default function JitsiConference(options) {
-    if (!options.name || options.name.toLowerCase() !== options.name) {
+    if (!options.name || options.name.toLowerCase() !== options.name.toString()) {
         const errmsg
             = 'Invalid conference name (no conference name passed or it '
                 + 'contains invalid characters like capital letters)!';
@@ -126,10 +130,29 @@ export default function JitsiConference(options) {
         logger.error(errmsg);
         throw new Error(errmsg);
     }
+    this.connection = options.connection;
+    this.xmpp = this.connection?.xmpp;
+
+    if (this.xmpp.isRoomCreated(options.name, options.customDomain)) {
+        const errmsg = 'A coference with the same name has already been created!';
+
+        delete this.connection;
+        delete this.xmpp;
+        logger.error(errmsg);
+        throw new Error(errmsg);
+    }
     this.eventEmitter = new EventEmitter();
     this.options = options;
     this.eventManager = new JitsiConferenceEventManager(this);
     this.participants = {};
+
+    /**
+     * The signaling layer instance.
+     * @type {SignalingLayerImpl}
+     * @private
+     */
+    this._signalingLayer = new SignalingLayerImpl();
+
     this._init(options);
     this.componentsVersions = new ComponentsVersions(this);
 
@@ -258,10 +281,24 @@ export default function JitsiConference(options) {
      * End-to-End Encryption. Make it available if supported.
      */
     if (this.isE2EESupported()) {
-        logger.info('End-to-End Encryprtion is supported');
+        logger.info('End-to-End Encryption is supported');
 
         this._e2eEncryption = new E2EEncryption(this);
     }
+
+    /**
+     * Flag set to <tt>true</tt> when Jicofo sends a presence message indicating that the max audio sender limit has
+     * been reached for the call. Once this is set, unmuting audio will be disabled from the client until it gets reset
+     * again by Jicofo.
+     */
+    this._audioSenderLimitReached = undefined;
+
+    /**
+     * Flag set to <tt>true</tt> when Jicofo sends a presence message indicating that the max video sender limit has
+     * been reached for the call. Once this is set, unmuting video will be disabled from the client until it gets reset
+     * again by Jicofo.
+     */
+    this._videoSenderLimitReached = undefined;
 }
 
 // FIXME convert JitsiConference to ES6 - ASAP !
@@ -289,15 +326,7 @@ JitsiConference.resourceCreator = function(jid, isAuthenticatedUser) {
  * @param options.connection {JitsiConnection} overrides this.connection
  */
 JitsiConference.prototype._init = function(options = {}) {
-    // Override connection and xmpp properties (Useful if the connection
-    // reloaded)
-    if (options.connection) {
-        this.connection = options.connection;
-        this.xmpp = this.connection.xmpp;
-
-        // Setup XMPP events only if we have new connection object.
-        this.eventManager.setupXMPPListeners();
-    }
+    this.eventManager.setupXMPPListeners();
 
     const { config } = this.options;
 
@@ -326,6 +355,8 @@ JitsiConference.prototype._init = function(options = {}) {
         JitsiConference.resourceCreator
     );
 
+    this._signalingLayer.setChatRoom(this.room);
+
     // Connection interrupted/restored listeners
     this._onIceConnectionInterrupted
         = this._onIceConnectionInterrupted.bind(this);
@@ -348,6 +379,13 @@ JitsiConference.prototype._init = function(options = {}) {
     this._sendConferenceJoinAnalyticsEvent = this._sendConferenceJoinAnalyticsEvent.bind(this);
     this.room.addListener(XMPPEvents.MEETING_ID_SET, this._sendConferenceJoinAnalyticsEvent);
 
+    this._removeLocalSourceOnReject = this._removeLocalSourceOnReject.bind(this);
+    this._updateRoomPresence = this._updateRoomPresence.bind(this);
+    this.room.addListener(XMPPEvents.SESSION_ACCEPT, this._updateRoomPresence);
+    this.room.addListener(XMPPEvents.SOURCE_ADD, this._updateRoomPresence);
+    this.room.addListener(XMPPEvents.SOURCE_ADD_ERROR, this._removeLocalSourceOnReject);
+    this.room.addListener(XMPPEvents.SOURCE_REMOVE, this._updateRoomPresence);
+
     this.e2eping = new E2ePing(
         this,
         config,
@@ -363,6 +401,9 @@ JitsiConference.prototype._init = function(options = {}) {
     if (!this.rtc) {
         this.rtc = new RTC(this, options);
         this.eventManager.setupRTCListeners();
+        if (FeatureFlags.isSourceNameSignalingEnabled()) {
+            this._registerRtcListeners(this.rtc);
+        }
     }
 
     this.receiveVideoController = new ReceiveVideoController(this, this.rtc);
@@ -373,10 +414,9 @@ JitsiConference.prototype._init = function(options = {}) {
             this.rtc,
             this,
             {
-                // Both these options are not public API, leaving it here only
-                // as an entry point through config for tuning up purposes.
-                // Default values should be adjusted as soon as optimal values
-                // are discovered.
+                // These options are not public API, leaving it here only as an entry point through config for tuning
+                // up purposes. Default values should be adjusted as soon as optimal values are discovered.
+                p2pRtcMuteTimeout: config._p2pConnStatusRtcMuteTimeout,
                 rtcMuteTimeout: config._peerConnStatusRtcMuteTimeout,
                 outOfLastNTimeout: config._peerConnStatusOutOfLastNTimeout
             });
@@ -564,7 +604,7 @@ JitsiConference.prototype.isP2PTestModeEnabled = function() {
  * Leaves the conference.
  * @returns {Promise}
  */
-JitsiConference.prototype.leave = function() {
+JitsiConference.prototype.leave = async function() {
     if (this.participantConnectionStatus) {
         this.participantConnectionStatus.dispose();
         this.participantConnectionStatus = null;
@@ -608,51 +648,61 @@ JitsiConference.prototype.leave = function() {
         this.p2pJingleSession = null;
     }
 
-    // leave the conference
-    if (this.room) {
-        const room = this.room;
-
-        // Unregister connection state listeners
-        room.removeListener(
-            XMPPEvents.CONNECTION_INTERRUPTED,
-            this._onIceConnectionInterrupted);
-        room.removeListener(
-            XMPPEvents.CONNECTION_RESTORED,
-            this._onIceConnectionRestored);
-        room.removeListener(
-            XMPPEvents.CONNECTION_ESTABLISHED,
-            this._onIceConnectionEstablished);
-
-        room.removeListener(
-            XMPPEvents.CONFERENCE_PROPERTIES_CHANGED,
-            this._updateProperties);
-
-        room.removeListener(XMPPEvents.MEETING_ID_SET, this._sendConferenceJoinAnalyticsEvent);
-
-        this.eventManager.removeXMPPListeners();
-
-        this.room = null;
-
-        return room.leave()
-            .then(() => {
-                if (this.rtc) {
-                    this.rtc.destroy();
-                }
-            })
-            .catch(error => {
-                // remove all participants because currently the conference
-                // won't be usable anyway. This is done on success automatically
-                // by the ChatRoom instance.
-                this.getParticipants().forEach(
-                    participant => this.onMemberLeft(participant.getJid()));
-
-                throw error;
-            });
+    // Leave the conference. If this.room == null we are calling second time leave().
+    if (!this.room) {
+        throw new Error('The conference is has been already left');
     }
 
-    // If this.room == null we are calling second time leave().
-    return Promise.reject(
-        new Error('The conference is has been already left'));
+    const room = this.room;
+
+    // Unregister connection state listeners
+    room.removeListener(
+        XMPPEvents.CONNECTION_INTERRUPTED,
+        this._onIceConnectionInterrupted);
+    room.removeListener(
+        XMPPEvents.CONNECTION_RESTORED,
+        this._onIceConnectionRestored);
+    room.removeListener(
+        XMPPEvents.CONNECTION_ESTABLISHED,
+        this._onIceConnectionEstablished);
+
+    room.removeListener(
+        XMPPEvents.CONFERENCE_PROPERTIES_CHANGED,
+        this._updateProperties);
+
+    room.removeListener(XMPPEvents.MEETING_ID_SET, this._sendConferenceJoinAnalyticsEvent);
+    room.removeListener(XMPPEvents.SESSION_ACCEPT, this._updateRoomPresence);
+    room.removeListener(XMPPEvents.SOURCE_ADD, this._updateRoomPresence);
+    room.removeListener(XMPPEvents.SOURCE_ADD_ERROR, this._removeLocalSourceOnReject);
+    room.removeListener(XMPPEvents.SOURCE_REMOVE, this._updateRoomPresence);
+
+    this.eventManager.removeXMPPListeners();
+
+    this._signalingLayer.setChatRoom(null);
+
+    this.room = null;
+
+    let leaveError;
+
+    try {
+        await room.leave();
+    } catch (err) {
+        leaveError = err;
+
+        // Remove all participants because currently the conference
+        // won't be usable anyway. This is done on success automatically
+        // by the ChatRoom instance.
+        this.getParticipants().forEach(
+            participant => this.onMemberLeft(participant.getJid()));
+    }
+
+    if (this.rtc) {
+        this.rtc.destroy();
+    }
+
+    if (leaveError) {
+        throw leaveError;
+    }
 };
 
 /**
@@ -681,6 +731,20 @@ JitsiConference.prototype._getMediaSessions = function() {
 };
 
 /**
+ * Registers event listeners on the RTC instance.
+ * @param {RTC} rtc - the RTC module instance used by this conference.
+ * @private
+ * @returns {void}
+ */
+JitsiConference.prototype._registerRtcListeners = function(rtc) {
+    rtc.addListener(RTCEvents.DATA_CHANNEL_OPEN, () => {
+        for (const localTrack of this.rtc.localTracks) {
+            localTrack.isVideoTrack() && this._sendBridgeVideoTypeMessage(localTrack);
+        }
+    });
+};
+
+/**
  * Sends the 'VideoTypeMessage' to the bridge on the bridge channel so that the bridge can make bitrate allocation
  * decisions based on the video type of the local source.
  *
@@ -695,14 +759,21 @@ JitsiConference.prototype._sendBridgeVideoTypeMessage = function(localtrack) {
         videoType = BridgeVideoType.DESKTOP_HIGH_FPS;
     }
 
-    this.rtc.setVideoType(videoType);
+    if (FeatureFlags.isSourceNameSignalingEnabled()) {
+        this.rtc.sendSourceVideoType(
+            getSourceNameForJitsiTrack(this.myUserId(), MediaType.VIDEO, 0),
+            videoType
+        );
+    } else {
+        this.rtc.setVideoType(videoType);
+    }
 };
 
 /**
  * Returns name of this conference.
  */
 JitsiConference.prototype.getName = function() {
-    return this.options.name;
+    return this.options.name.toString();
 };
 
 /**
@@ -925,7 +996,14 @@ JitsiConference.prototype.removeCommand = function(name) {
  */
 JitsiConference.prototype.setDisplayName = function(name) {
     if (this.room) {
-        this.room.addOrReplaceInPresence('nick', {
+        const nickKey = 'nick';
+
+        // if there is no display name already set, avoid setting an empty one
+        if (!name && !this.room.getFromPresence(nickKey)) {
+            return;
+        }
+
+        this.room.addOrReplaceInPresence(nickKey, {
             attributes: { xmlns: 'http://jabber.org/protocol/nick' },
             value: name
         }) && this.room.sendPresence();
@@ -1073,11 +1151,23 @@ JitsiConference.prototype._fireMuteChangeEvent = function(track) {
  * @returns {Array<JitsiLocalTrack>} - list of local tracks that are unmuted.
  */
 JitsiConference.prototype._getInitialLocalTracks = function() {
-    // Always add the audio track on mobile Safari because of a known issue where audio playout doesn't happen
-    // if the user joins audio and video muted.
+    // Always add the audio track on certain platforms:
+    //  * Safari / WebKit: because of a known issue where audio playout doesn't happen
+    //    if the user joins audio and video muted.
+    //  * React Native: after iOS 15, if a user joins muted they won't be able to unmute.
     return this.getLocalTracks()
-        .filter(track => (track.getType() === MediaType.AUDIO && (!this.isStartAudioMuted() || browser.isIosBrowser()))
-        || (track.getType() === MediaType.VIDEO && !this.isStartVideoMuted()));
+        .filter(track => {
+            const trackType = track.getType();
+
+            if (trackType === MediaType.AUDIO
+                    && (!this.isStartAudioMuted() || browser.isWebKitBased() || browser.isReactNative())) {
+                return true;
+            } else if (trackType === MediaType.VIDEO && !this.isStartVideoMuted()) {
+                return true;
+            }
+
+            return false;
+        });
 };
 
 /**
@@ -1122,8 +1212,10 @@ JitsiConference.prototype.removeTrack = function(track) {
  * @returns {Promise} resolves when the replacement is finished
  */
 JitsiConference.prototype.replaceTrack = function(oldTrack, newTrack) {
+    const oldTrackBelongsToConference = this === oldTrack?.conference;
+
     // First do the removal of the oldTrack at the JitsiConference level
-    if (oldTrack) {
+    if (oldTrackBelongsToConference) {
         if (oldTrack.disposed) {
             return Promise.reject(
                 new JitsiTrackError(JitsiTrackErrors.TRACK_IS_DISPOSED));
@@ -1136,15 +1228,27 @@ JitsiConference.prototype.replaceTrack = function(oldTrack, newTrack) {
         }
     }
 
+    if (oldTrack && !oldTrackBelongsToConference) {
+        logger.warn(`JitsiConference.replaceTrack oldTrack (${oldTrack} does not belong to this conference`);
+    }
+
     // Now replace the stream at the lower levels
-    return this._doReplaceTrack(oldTrack, newTrack)
+    return this._doReplaceTrack(oldTrackBelongsToConference ? oldTrack : null, newTrack)
         .then(() => {
-            oldTrack && this.onLocalTrackRemoved(oldTrack);
+            oldTrackBelongsToConference && this.onLocalTrackRemoved(oldTrack);
             newTrack && this._setupNewTrack(newTrack);
 
             // Send 'VideoTypeMessage' on the bridge channel when a video track is added/removed.
-            if (oldTrack?.isVideoTrack() || newTrack?.isVideoTrack()) {
+            if ((oldTrackBelongsToConference && oldTrack?.isVideoTrack()) || newTrack?.isVideoTrack()) {
                 this._sendBridgeVideoTypeMessage(newTrack);
+            }
+
+            // updates presence when we replace the video tracks desktop with screen and screen with desktop
+            if (oldTrackBelongsToConference && oldTrack?.isVideoTrack()
+
+                // we do not want to send presence update during setEffect switching, which does remove and then add
+                && !(oldTrack?._setEffectInProgress || newTrack?._setEffectInProgress)) {
+                this._updateRoomPresence(this._getActiveMediaSession());
             }
 
             if (newTrack !== null && (this.isMutedByFocus || this.isVideoMutedByFocus)) {
@@ -1153,7 +1257,11 @@ JitsiConference.prototype.replaceTrack = function(oldTrack, newTrack) {
 
             return Promise.resolve();
         })
-        .catch(error => Promise.reject(new Error(error)));
+        .catch(error => {
+            logger.error(`replaceTrack failed: ${error?.stack}`);
+
+            return Promise.reject(error);
+        });
 };
 
 /**
@@ -1189,6 +1297,24 @@ JitsiConference.prototype._doReplaceTrack = function(oldTrack, newTrack) {
 };
 
 /**
+ * Handler for when a source-add for a local source is rejected by Jicofo.
+ *
+ * @param {JingleSessionPC} jingleSession - The media session.
+ * @param {Error} error - The error message.
+ * @param {MediaType} mediaType - The media type of the track associated with the source that was rejected.
+ * @returns {void}
+ */
+JitsiConference.prototype._removeLocalSourceOnReject = function(jingleSession, error, mediaType) {
+    if (!jingleSession) {
+        return;
+    }
+    logger.warn(`Source-add rejected on ${jingleSession}, reason="${error?.reason}", message="${error?.msg}"`);
+    const track = this.getLocalTracks(mediaType)[0];
+
+    this.eventEmitter.emit(JitsiConferenceEvents.TRACK_UNMUTE_REJECTED, track);
+};
+
+/**
  * Operations related to creating a new track
  * @param {JitsiLocalTrack} newTrack the new track being created
  */
@@ -1208,22 +1334,8 @@ JitsiConference.prototype._setupNewTrack = function(newTrack) {
                 RTC.getEventDataForActiveDevice(device));
         }
     }
-    if (newTrack.isVideoTrack()) {
-        const videoTypeTagName = 'videoType';
 
-        // if video type is camera and there is no videoType in presence, we skip adding it, as this is the default one
-        if (newTrack.videoType !== VideoType.CAMERA || this.room.getFromPresence(videoTypeTagName)) {
-            this.sendCommand(videoTypeTagName, { value: newTrack.videoType });
-        }
-    }
     this.rtc.addLocalTrack(newTrack);
-
-    // ensure that we're sharing proper "is muted" state
-    if (newTrack.isAudioTrack()) {
-        this.room.setAudioMute(newTrack.isMuted());
-    } else {
-        this.room.setVideoMute(newTrack.isMuted());
-    }
 
     newTrack.muteHandler = this._fireMuteChangeEvent.bind(this, newTrack);
     newTrack.audioLevelHandler = this._fireAudioLevelChangeEvent.bind(this);
@@ -1237,6 +1349,73 @@ JitsiConference.prototype._setupNewTrack = function(newTrack) {
     newTrack._setConference(this);
 
     this.eventEmitter.emit(JitsiConferenceEvents.TRACK_ADDED, newTrack);
+};
+
+/**
+ * Sets the video type.
+ * @param track
+ * @return <tt>true</tt> if video type was changed in presence.
+ * @private
+ */
+JitsiConference.prototype._setNewVideoType = function(track) {
+    if (FeatureFlags.isSourceNameSignalingEnabled() && track) {
+        // FIXME once legacy signaling using 'sendCommand' is removed, signalingLayer.setTrackVideoType must be adjusted
+        // to send the presence (not just modify it).
+        this._signalingLayer.setTrackVideoType(
+            getSourceNameForJitsiTrack(
+                this.myUserId(),
+                track.getType(),
+                0
+            ),
+            track.videoType);
+
+        // TODO: Optimize to detect whether presence was changed, for now always report changed to send presence
+        return true;
+    }
+
+    const videoTypeTagName = 'videoType';
+
+    // if track is missing we revert to default type Camera, the case where we screenshare and
+    // we return to be video muted
+    const trackVideoType = track ? track.videoType : VideoType.CAMERA;
+
+    // if video type is camera and there is no videoType in presence, we skip adding it, as this is the default one
+    if (trackVideoType !== VideoType.CAMERA || this.room.getFromPresence(videoTypeTagName)) {
+        // we will not use this.sendCommand here to avoid sending the presence immediately, as later we may also set
+        // and the mute status
+        return this.room.addOrReplaceInPresence(videoTypeTagName, { value: trackVideoType });
+    }
+
+    return false;
+};
+
+/**
+ * Sets mute status.
+ * @param mediaType
+ * @param localTrack
+ * @param isMuted
+ * @param <tt>true</tt> when presence was changed, <tt>false</tt> otherwise.
+ * @private
+ */
+JitsiConference.prototype._setTrackMuteStatus = function(mediaType, localTrack, isMuted) {
+    if (FeatureFlags.isSourceNameSignalingEnabled()) {
+        // TODO When legacy signaling part is removed, remember to adjust signalingLayer.setTrackMuteStatus, so that
+        // it triggers sending the presence (it only updates it for now, because the legacy code below sends).
+        this._signalingLayer.setTrackMuteStatus(
+            getSourceNameForJitsiTrack(this.myUserId(), mediaType, 0),
+            isMuted
+        );
+    }
+
+    if (!this.room) {
+        return false;
+    }
+
+    if (mediaType === MediaType.AUDIO) {
+        return this.room.addAudioInfoToPresence(isMuted);
+    }
+
+    return this.room.addVideoInfoToPresence(isMuted);
 };
 
 /**
@@ -1725,41 +1904,32 @@ JitsiConference.prototype.onMemberLeft = function(jid) {
     }
 
     const participant = this.participants[id];
-
-    delete this.participants[id];
-
-    // Remove the ssrcs from the remote description.
     const mediaSessions = this._getMediaSessions();
-    const removePromises = [];
+    let tracksToBeRemoved = [];
 
     for (const session of mediaSessions) {
-        removePromises.push(session.removeRemoteStreamsOnLeave(id));
+        const remoteTracks = session.peerconnection.getRemoteTracks(id);
+
+        remoteTracks && (tracksToBeRemoved = [ ...tracksToBeRemoved, ...remoteTracks ]);
+
+        // Remove the ssrcs from the remote description and renegotiate.
+        session.removeRemoteStreamsOnLeave(id);
     }
 
-    Promise.allSettled(removePromises)
-        .then(results => {
-            let removedTracks = [];
+    // Fire the event before renegotiation is done so that the thumbnails can be removed immediately.
+    tracksToBeRemoved.forEach(track => {
+        this.eventEmitter.emit(JitsiConferenceEvents.TRACK_REMOVED, track);
+    });
 
-            results.map(result => result.value).forEach(value => {
-                if (value) {
-                    removedTracks = removedTracks.concat(value);
-                }
-            });
+    if (participant) {
+        delete this.participants[id];
+        this.eventEmitter.emit(JitsiConferenceEvents.USER_LEFT, id, participant);
+    }
 
-            removedTracks.forEach(track => {
-                this.eventEmitter.emit(JitsiConferenceEvents.TRACK_REMOVED, track);
-            });
-
-            // There can be no participant in case the member that left is focus.
-            if (participant) {
-                this.eventEmitter.emit(JitsiConferenceEvents.USER_LEFT, id, participant);
-            }
-
-            if (this.room !== null) { // Skip if we have left the room already.
-                this._maybeStartOrStopP2P(true /* triggered by user left event */);
-                this._maybeClearSITimeout();
-            }
-        });
+    if (this.room !== null) { // Skip if we have left the room already.
+        this._maybeStartOrStopP2P(true /* triggered by user left event */);
+        this._maybeClearSITimeout();
+    }
 };
 
 /* eslint-disable max-params */
@@ -2015,7 +2185,7 @@ JitsiConference.prototype.onIncomingCall = function(
     if (jingleSession.isP2P) {
         this._onIncomingCallP2P(jingleSession, jingleOffer);
     } else {
-        if (!this.room.isFocus(jingleSession.remoteJid)) {
+        if (!this.isFocus(jingleSession.remoteJid)) {
             const description = 'Rejecting session-initiate from non-focus.';
 
             this._rejectIncomingCall(
@@ -2067,10 +2237,14 @@ JitsiConference.prototype._acceptJvbIncomingCall = function(
         }));
 
     try {
-        jingleSession.initialize(this.room, this.rtc, {
-            ...this.options.config,
-            enableInsertableStreams: this.isE2EEEnabled()
-        });
+        jingleSession.initialize(
+            this.room,
+            this.rtc,
+            this._signalingLayer,
+            {
+                ...this.options.config,
+                enableInsertableStreams: this.isE2EEEnabled()
+            });
     } catch (error) {
         GlobalOnErrorHandler.callErrorHandler(error);
         logger.error(error);
@@ -2231,6 +2405,8 @@ JitsiConference.prototype.onCallEnded = function(
         // Let the RTC service do any cleanups
         this.rtc.onCallEnded();
     } else if (jingleSession === this.p2pJingleSession) {
+        const stopOptions = {};
+
         // It's the responder who decides to enforce JVB mode, so that both
         // initiator and responder are aware if it was intentional.
         if (reasonCondition === 'decline' && reasonText === 'force JVB121') {
@@ -2242,8 +2418,12 @@ JitsiConference.prototype.onCallEnded = function(
             // terminates the session, before we get the event on our side.
             // But we are able to parse the reason and mark it here.
             Statistics.analytics.addPermanentProperties({ p2pFailed: true });
+        } else if (reasonCondition === 'success' && reasonText === 'restart') {
+            // When we are restarting media sessions we don't want to switch the tracks
+            // to the JVB just yet.
+            stopOptions.requestRestart = true;
         }
-        this._stopP2PSession();
+        this._stopP2PSession(stopOptions);
     } else {
         logger.error(
             'Received onCallEnded for invalid session',
@@ -2621,14 +2801,13 @@ JitsiConference.prototype.sendApplicationLog = function(message) {
 };
 
 /**
- * Checks if the user identified by given <tt>mucJid</tt> is the conference
- * focus.
+ * Checks if the user identified by given <tt>mucJid</tt> is the conference focus.
  * @param mucJid the full MUC address of the user to be checked.
  * @returns {boolean|null} <tt>true</tt> if MUC user is the conference focus,
  * <tt>false</tt> when is not. <tt>null</tt> if we're not in the MUC anymore and
  * are unable to figure out the status or if given <tt>mucJid</tt> is invalid.
  */
-JitsiConference.prototype._isFocus = function(mucJid) {
+JitsiConference.prototype.isFocus = function(mucJid) {
     return this.room ? this.room.isFocus(mucJid) : null;
 };
 
@@ -2750,7 +2929,6 @@ JitsiConference.prototype.isConnectionInterrupted = function() {
  */
 JitsiConference.prototype._onConferenceRestarted = function(session) {
     if (!session.isP2P && this.options.config.enableForcedReload) {
-        this.restartInProgress = true;
         this.eventEmitter.emit(JitsiConferenceEvents.CONFERENCE_FAILED, JitsiConferenceErrors.CONFERENCE_RESTARTED);
     }
 };
@@ -2793,7 +2971,10 @@ JitsiConference.prototype._onIceConnectionFailed = function(session) {
                     }));
 
         }
-        this._stopP2PSession('connectivity-error', 'ICE FAILED');
+        this._stopP2PSession({
+            reason: 'connectivity-error',
+            reasonDescription: 'ICE FAILED'
+        });
     } else if (session && this.jvbJingleSession === session) {
         this._delayedIceFailed = new IceFailedHandling(this);
         this._delayedIceFailed.start(session);
@@ -2835,7 +3016,9 @@ JitsiConference.prototype._acceptP2PIncomingCall = function(
 
     this.p2pJingleSession.initialize(
         this.room,
-        this.rtc, {
+        this.rtc,
+        this._signalingLayer,
+        {
             ...this.options.config,
             enableInsertableStreams: this.isE2EEEnabled()
         });
@@ -2863,7 +3046,7 @@ JitsiConference.prototype._acceptP2PIncomingCall = function(
 
             this.eventEmitter.emit(
                 JitsiConferenceEvents._MEDIA_SESSION_STARTED,
-                this.p2pJingleSession);
+                jingleSession);
         },
         error => {
             logger.error(
@@ -2941,7 +3124,10 @@ JitsiConference.prototype._onIceConnectionEstablished = function(
         && Math.random() < forceJVB121Ratio) {
         logger.info(`Forcing JVB 121 mode (ratio=${forceJVB121Ratio})...`);
         Statistics.analytics.addPermanentProperties({ forceJvb121: true });
-        this._stopP2PSession('decline', 'force JVB121');
+        this._stopP2PSession({
+            reason: 'decline',
+            reasonDescription: 'force JVB121'
+        });
 
         done = true;
     }
@@ -3007,9 +3193,22 @@ JitsiConference.prototype._updateProperties = function(properties = {}) {
 
     this.properties = properties;
     if (changed) {
-        this.eventEmitter.emit(
-            JitsiConferenceEvents.PROPERTIES_CHANGED,
-            this.properties);
+        this.eventEmitter.emit(JitsiConferenceEvents.PROPERTIES_CHANGED, this.properties);
+
+        const audioLimitReached = this.properties['audio-limit-reached'] === 'true';
+        const videoLimitReached = this.properties['video-limit-reached'] === 'true';
+
+        if (this._audioSenderLimitReached !== audioLimitReached) {
+            this._audioSenderLimitReached = audioLimitReached;
+            this.eventEmitter.emit(JitsiConferenceEvents.AUDIO_UNMUTE_PERMISSIONS_CHANGED, audioLimitReached);
+            logger.info(`Audio unmute permissions set by Jicofo to ${audioLimitReached}`);
+        }
+
+        if (this._videoSenderLimitReached !== videoLimitReached) {
+            this._videoSenderLimitReached = videoLimitReached;
+            this.eventEmitter.emit(JitsiConferenceEvents.VIDEO_UNMUTE_PERMISSIONS_CHANGED, videoLimitReached);
+            logger.info(`Video unmute permissions set by Jicofo to ${videoLimitReached}`);
+        }
 
         // Some of the properties need to be added to analytics events.
         const analyticsKeys = [
@@ -3195,7 +3394,9 @@ JitsiConference.prototype._startP2PSession = function(remoteJid) {
 
     this.p2pJingleSession.initialize(
         this.room,
-        this.rtc, {
+        this.rtc,
+        this._signalingLayer,
+        {
             ...this.options.config,
             enableInsertableStreams: this.isE2EEEnabled()
         });
@@ -3244,7 +3445,11 @@ JitsiConference.prototype._suspendMediaTransferForJvbConnection = function() {
  * @private
  */
 JitsiConference.prototype._maybeStartOrStopP2P = function(userLeftEvent) {
-    if (!this.isP2PEnabled() || this.isP2PTestModeEnabled() || browser.isFirefox() || browser.isWebKitBased()) {
+    if (!this.isP2PEnabled()
+            || this.isP2PTestModeEnabled()
+            || browser.isFirefox()
+            || browser.isWebKitBased()
+            || this.isE2EEEnabled()) {
         logger.info('Auto P2P disabled');
 
         return;
@@ -3329,15 +3534,22 @@ JitsiConference.prototype._shouldBeInP2PMode = function() {
 
 /**
  * Stops the current P2P session.
- * @param {string} [reason="success"] one of the Jingle "reason" element
+ * @param {Object} options - Options for stopping P2P.
+ * @param {string} options.reason - One of the Jingle "reason" element
  * names as defined by https://xmpp.org/extensions/xep-0166.html#def-reason
- * @param {string} [reasonDescription="Turing off P2P session"] text
+ * @param {string} options.reasonDescription - Text
  * description that will be included in the session terminate message
+ * @param {boolean} requestRestart - Whether this is due to a session restart, in which case
+ * media will not be resumed on the JVB.
  * @private
  */
-JitsiConference.prototype._stopP2PSession = function(
-        reason,
-        reasonDescription) {
+JitsiConference.prototype._stopP2PSession = function(options = {}) {
+    const {
+        reason = 'success',
+        reasonDescription = 'Turning off P2P session',
+        requestRestart = false
+    } = options;
+
     if (!this.p2pJingleSession) {
         logger.error('No P2P session to be stopped!');
 
@@ -3348,7 +3560,7 @@ JitsiConference.prototype._stopP2PSession = function(
 
     // Swap remote tracks, but only if the P2P has been fully established
     if (wasP2PEstablished) {
-        if (this.jvbJingleSession) {
+        if (this.jvbJingleSession && !requestRestart) {
             this._resumeMediaTransferForJvbConnection();
         }
 
@@ -3377,18 +3589,16 @@ JitsiConference.prototype._stopP2PSession = function(
             // crash the responder would stay in P2P mode until ICE fails which
             // could take up to 20 seconds.
             //
-            // NOTE lack of 'reason' is considered as graceful session terminate
+            // NOTE: whilst this is an error callback,  'success' as a reason is
+            // considered as graceful session terminate
             // where both initiator and responder terminate their sessions
             // simultaneously.
-            if (reason) {
-                logger.error(
-                    'An error occurred while trying to terminate'
-                        + ' P2P Jingle session', error);
+            if (reason !== 'success') {
+                logger.error('An error occurred while trying to terminate P2P Jingle session', error);
             }
         }, {
-            reason: reason ? reason : 'success',
-            reasonDescription: reasonDescription
-                ? reasonDescription : 'Turing off P2P session',
+            reason,
+            reasonDescription,
             sendSessionTerminate: this.room
                 && this.getParticipantById(
                     Strophe.getResourceFromJid(this.p2pJingleSession.remoteJid))
@@ -3401,12 +3611,57 @@ JitsiConference.prototype._stopP2PSession = function(
 
     if (wasP2PEstablished) {
         // Add back remote JVB tracks
-        if (this.jvbJingleSession) {
+        if (this.jvbJingleSession && !requestRestart) {
             this._addRemoteJVBTracks();
         } else {
             logger.info('Not adding remote JVB tracks - no session yet');
         }
     }
+};
+
+/**
+ * Updates room presence if needed and send the packet in case of a modification.
+ * @param {JingleSessionPC} jingleSession the session firing the event, contains the peer connection which
+ * tracks we will check.
+ * @param {Object|null} ctx a context object we can distinguish multiple calls of the same pass of updating tracks.
+ */
+JitsiConference.prototype._updateRoomPresence = function(jingleSession, ctx) {
+    if (!jingleSession) {
+        return;
+    }
+
+    // skips sending presence twice for the same pass of updating ssrcs
+    if (ctx) {
+        if (ctx.skip) {
+            return;
+        }
+        ctx.skip = true;
+    }
+
+    const localAudioTracks = jingleSession.peerconnection.getLocalTracks(MediaType.AUDIO);
+    const localVideoTracks = jingleSession.peerconnection.getLocalTracks(MediaType.VIDEO);
+    let presenceChanged = false;
+
+    if (localAudioTracks && localAudioTracks.length) {
+        presenceChanged = this._setTrackMuteStatus(MediaType.AUDIO, localAudioTracks[0], localAudioTracks[0].isMuted());
+    } else if (this._setTrackMuteStatus(MediaType.AUDIO, undefined, true)) {
+        presenceChanged = true;
+    }
+
+    if (localVideoTracks && localVideoTracks.length) {
+        const muteStatusChanged = this._setTrackMuteStatus(
+            MediaType.VIDEO, localVideoTracks[0], localVideoTracks[0].isMuted());
+        const videoTypeChanged = this._setNewVideoType(localVideoTracks[0]);
+
+        presenceChanged = presenceChanged || muteStatusChanged || videoTypeChanged;
+    } else {
+        const muteStatusChanged = this._setTrackMuteStatus(MediaType.VIDEO, undefined, true);
+        const videoTypeChanged = this._setNewVideoType(); // set back to default video type
+
+        presenceChanged = presenceChanged || muteStatusChanged || videoTypeChanged;
+    }
+
+    presenceChanged && this.room.sendPresence();
 };
 
 /**
@@ -3475,10 +3730,10 @@ JitsiConference.prototype.startP2PSession = function() {
 };
 
 /**
- * Manually stops the current P2P session (should be used only in the tests)
+ * Manually stops the current P2P session (should be used only in the tests).
  */
-JitsiConference.prototype.stopP2PSession = function() {
-    this._stopP2PSession();
+JitsiConference.prototype.stopP2PSession = function(options) {
+    this._stopP2PSession(options);
 };
 
 /**
@@ -3487,6 +3742,14 @@ JitsiConference.prototype.stopP2PSession = function() {
  */
 JitsiConference.prototype.getSpeakerStats = function() {
     return this.speakerStatsCollector.getStats();
+};
+
+/**
+ * Sends a facial expression with its duration to the xmpp server.
+ * @param {Object} payload
+ */
+JitsiConference.prototype.sendFacialExpression = function(payload) {
+    this.xmpp.sendFacialExpressionEvent(this.room.roomjid, payload);
 };
 
 /**
@@ -3604,7 +3867,10 @@ JitsiConference.prototype._sendConferenceLeftAnalyticsEvent = function() {
  */
 JitsiConference.prototype._restartMediaSessions = function() {
     if (this.p2pJingleSession) {
-        this.stopP2PSession();
+        this._stopP2PSession({
+            reasonDescription: 'restart',
+            requestRestart: true
+        });
     }
 
     if (this.jvbJingleSession) {
@@ -3629,7 +3895,7 @@ JitsiConference.prototype._restartMediaSessions = function() {
  * @returns {boolean}
  */
 JitsiConference.prototype.isE2EEEnabled = function() {
-    return this._e2eEncryption && this._e2eEncryption.isEnabled();
+    return Boolean(this._e2eEncryption && this._e2eEncryption.isEnabled());
 };
 
 /**
@@ -3656,6 +3922,17 @@ JitsiConference.prototype.toggleE2EE = function(enabled) {
     }
 
     this._e2eEncryption.setEnabled(enabled);
+};
+
+/**
+ * Sets the key and index for End-to-End encryption.
+ *
+ * @param {CryptoKey} [keyInfo.encryptionKey] - encryption key.
+ * @param {Number} [keyInfo.index] - the index of the encryption key.
+ * @returns {void}
+ */
+JitsiConference.prototype.setMediaEncryptionKey = function(keyInfo) {
+    this._e2eEncryption.setEncryptionKey(keyInfo);
 };
 
 /**
@@ -3825,4 +4102,13 @@ JitsiConference.prototype.avModerationReject = function(mediaType, id) {
             this.isModerator() ? '' : 'participant is not a moderator, '}${
             this.room && this.isModerator() ? 'wrong media type passed' : ''}`);
     }
+};
+
+/**
+ * Returns the breakout rooms manager object.
+ *
+ * @returns {Object} the breakout rooms manager.
+ */
+JitsiConference.prototype.getBreakoutRooms = function() {
+    return this.room?.getBreakoutRooms();
 };
