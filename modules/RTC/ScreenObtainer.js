@@ -1,4 +1,4 @@
-
+/* global APP */
 import JitsiTrackError from '../../JitsiTrackError';
 import * as JitsiTrackErrors from '../../JitsiTrackErrors';
 import browser from '../browser';
@@ -223,6 +223,15 @@ const ScreenObtainer = {
 
         getDisplayMedia(constraints)
             .then(stream => {
+                const state = APP.store.getState();
+                const { videoModerationEnabled } = state['features/av-moderation'];
+                const { privateRoom, roomOwner } = state['features/base/conference'];
+                const isModerator = state['features/base/participants'].local?.role === 'moderator';
+                const isRoomOwnerInThisPrivateRoom = isModerator && ((privateRoom && roomOwner) || !privateRoom);
+
+                if (videoModerationEnabled && !isRoomOwnerInThisPrivateRoom) {
+                    throw new Error({ message: 'Av moderation is enabled during ss process.' });
+                }
                 callback({
                     stream,
                     sourceId: stream.id
