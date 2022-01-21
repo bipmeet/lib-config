@@ -230,6 +230,7 @@ const ScreenObtainer = {
                 const isRoomOwnerInThisPrivateRoom = isModerator && ((privateRoom && roomOwner) || !privateRoom);
 
                 if (videoModerationEnabled && !isRoomOwnerInThisPrivateRoom) {
+                    stream.getTracks().forEach(t => t.stop());
                     throw new Error({ message: 'Av moderation is enabled during ss process.' });
                 }
                 callback({
