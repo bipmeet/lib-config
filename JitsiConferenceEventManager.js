@@ -1,6 +1,4 @@
-/* global __filename */
-
-import { getLogger } from 'jitsi-meet-logger';
+import { getLogger } from '@jitsi/logger';
 import { Strophe } from 'strophe.js';
 
 import * as JitsiConferenceErrors from './JitsiConferenceErrors';
@@ -151,6 +149,9 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
     this.chatRoomForwarder.forward(XMPPEvents.MUC_JOINED,
         JitsiConferenceEvents.CONFERENCE_JOINED);
 
+    this.chatRoomForwarder.forward(XMPPEvents.MUC_JOIN_IN_PROGRESS,
+        JitsiConferenceEvents.CONFERENCE_JOIN_IN_PROGRESS);
+
     this.chatRoomForwarder.forward(XMPPEvents.MEETING_ID_SET,
         JitsiConferenceEvents.CONFERENCE_UNIQUE_ID_SET);
 
@@ -247,6 +248,10 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
     this.chatRoomForwarder.forward(XMPPEvents.CHAT_ERROR_RECEIVED,
         JitsiConferenceEvents.CONFERENCE_ERROR,
         JitsiConferenceErrors.CHAT_ERROR);
+
+    this.chatRoomForwarder.forward(XMPPEvents.SETTINGS_ERROR_RECEIVED,
+        JitsiConferenceEvents.CONFERENCE_ERROR,
+        JitsiConferenceErrors.SETTINGS_ERROR);
 
     this.chatRoomForwarder.forward(XMPPEvents.FOCUS_DISCONNECTED,
         JitsiConferenceEvents.CONFERENCE_FAILED,
@@ -508,6 +513,12 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
                 conference.statistics.sendAddIceCandidateFailed(e, pc);
             });
     }
+
+    // Breakout rooms.
+    this.chatRoomForwarder.forward(XMPPEvents.BREAKOUT_ROOMS_MOVE_TO_ROOM,
+        JitsiConferenceEvents.BREAKOUT_ROOMS_MOVE_TO_ROOM);
+    this.chatRoomForwarder.forward(XMPPEvents.BREAKOUT_ROOMS_UPDATED,
+        JitsiConferenceEvents.BREAKOUT_ROOMS_UPDATED);
 };
 
 /**
@@ -747,28 +758,6 @@ JitsiConferenceEventManager.prototype.setupXMPPListeners = function() {
                 });
             }
         });
-
-    this._addConferenceXMPPListener(XMPPEvents.AV_MODERATION_CHANGED,
-        (value, mediaType, actorJid) => {
-            const actorParticipant = conference.getParticipants().find(p => p.getJid() === actorJid);
-
-            conference.eventEmitter.emit(JitsiConferenceEvents.AV_MODERATION_CHANGED, {
-                enabled: value,
-                mediaType,
-                actor: actorParticipant
-            });
-        });
-    this._addConferenceXMPPListener(XMPPEvents.AV_MODERATION_PARTICIPANT_APPROVED,
-        (mediaType, jid) => {
-            const participant = conference.getParticipantById(Strophe.getResourceFromJid(jid));
-
-            if (participant) {
-                conference.eventEmitter.emit(JitsiConferenceEvents.AV_MODERATION_PARTICIPANT_APPROVED, {
-                    participant,
-                    mediaType
-                });
-            }
-        });
     this._addConferenceXMPPListener(XMPPEvents.AV_MODERATION_PARTICIPANT_REJECTED,
         (mediaType, jid) => {
             const participant = conference.getParticipantById(Strophe.getResourceFromJid(jid));
@@ -830,7 +819,7 @@ JitsiConferenceEventManager.prototype.setupStatisticsListeners = function() {
                     return;
                 }
 
-                track._onByteSentStatsReceived(tpc, stats[ssrc]);
+                track.onByteSentStatsReceived(tpc, stats[ssrc]);
             });
         });
     }
