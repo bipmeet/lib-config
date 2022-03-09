@@ -59,9 +59,10 @@
     "webpack-cli": "4.9.0"
   },
   "scripts": {
+    "build": "export LIB_JITSI_MEET_COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null) && webpack && tsc --build --clean && tsc",
     "lint": "eslint .",
     "lint-fix": "eslint . --fix",
-    "postinstall": "webpack && tsc",
+    "prepack": "npm run build",
     "test": "karma start karma.conf.js",
     "test-watch": "karma start karma.conf.js --no-single-run",
     "validate": "npm ls",
@@ -69,5 +70,11 @@
   },
   "browser": "dist/umd/lib-jitsi-meet.min.js",
   "module": "dist/esm/JitsiMeetJS.js",
+  "files": [
+    "dist",
+    "types",
+    "connection_optimization/external_connect.js",
+    "modules/browser/capabilities.json"
+  ],
   "license": "Apache-2.0"
 }
