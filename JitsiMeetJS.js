@@ -1,6 +1,4 @@
-/* global __filename */
-
-import Logger from 'jitsi-meet-logger';
+import Logger from '@jitsi/logger';
 
 import * as JitsiConferenceErrors from './JitsiConferenceErrors';
 import * as JitsiConferenceEvents from './JitsiConferenceEvents';
@@ -18,9 +16,11 @@ import browser from './modules/browser';
 import NetworkInfo from './modules/connectivity/NetworkInfo';
 import { ParticipantConnectionStatus }
     from './modules/connectivity/ParticipantConnectionStatus';
+import { TrackStreamingStatus } from './modules/connectivity/TrackStreamingStatus';
 import getActiveAudioDevice from './modules/detection/ActiveDeviceDetector';
 import * as DetectionEvents from './modules/detection/DetectionEvents';
 import TrackVADEmitter from './modules/detection/TrackVADEmitter';
+import FeatureFlags from './modules/flags/FeatureFlags';
 import ProxyConnectionService
     from './modules/proxyconnection/ProxyConnectionService';
 import recordingConstants from './modules/recording/recordingConstants';
@@ -33,7 +33,7 @@ import GlobalOnErrorHandler from './modules/util/GlobalOnErrorHandler';
 import ScriptUtil from './modules/util/ScriptUtil';
 import * as VideoSIPGWConstants from './modules/videosipgw/VideoSIPGWConstants';
 import AudioMixer from './modules/webaudio/AudioMixer';
-import * as MediaType from './service/RTC/MediaType';
+import { MediaType } from './service/RTC/MediaType';
 import * as ConnectionQualityEvents
     from './service/connectivity/ConnectionQualityEvents';
 import * as E2ePingEvents from './service/e2eping/E2ePingEvents';
@@ -120,7 +120,8 @@ export default _mergeNamespaceAndModule({
         participantConnectionStatus: ParticipantConnectionStatus,
         recording: recordingConstants,
         sipVideoGW: VideoSIPGWConstants,
-        transcriptionStatus: JitsiTranscriptionStatus
+        transcriptionStatus: JitsiTranscriptionStatus,
+        trackStreamingStatus: TrackStreamingStatus
     },
     events: {
         conference: JitsiConferenceEvents,
@@ -146,6 +147,9 @@ export default _mergeNamespaceAndModule({
         Settings.init(options.externalStorage);
         Statistics.init(options);
 
+        // Configure the feature flags.
+        FeatureFlags.init(options.flags || { });
+
         // Initialize global window.connectionTimes
         // FIXME do not use 'window'
         if (!window.connectionTimes) {
@@ -160,23 +164,6 @@ export default _mergeNamespaceAndModule({
         if (options.enableWindowOnErrorHandler) {
             GlobalOnErrorHandler.addHandler(
                 this.getGlobalOnErrorHandler.bind(this));
-        }
-
-        // Log deployment-specific information, if available. Defined outside
-        // the application by individual deployments
-        const aprops = options.deploymentInfo;
-
-        if (aprops && Object.keys(aprops).length > 0) {
-            const logObject = {};
-
-            for (const attr in aprops) {
-                if (aprops.hasOwnProperty(attr)) {
-                    logObject[attr] = aprops[attr];
-                }
-            }
-
-            logObject.id = 'deployment_info';
-            Statistics.sendLog(JSON.stringify(logObject));
         }
 
         if (this.version) {

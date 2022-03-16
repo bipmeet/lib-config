@@ -5,6 +5,7 @@ export default {
         NOT_ALLOWED: 'not-allowed',
         POLICY_VIOLATION: 'policy-violation',
         RESOURCE_CONSTRAINT: 'resource-constraint',
+        UNEXPECTED_REQUEST: 'unexpected-request',
         SERVICE_UNAVAILABLE: 'service-unavailable'
     },
     mode: {
