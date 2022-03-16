@@ -71,32 +71,32 @@ export enum XMPPEvents {
     /**
      * Videoaccess prop has been changed for participant.
      */
-    VIDEOACCESS_CHANGED_FOR_PARTICIPANT: 'xmpp.videoaccess_changed_for_participant',
+    VIDEOACCESS_CHANGED_FOR_PARTICIPANT = 'xmpp.videoaccess_changed_for_participant',
 
     /**
      * Videoaccess prop has been changed for participant.
      */
-    VIDEO_ACCESS_CHANGED_FOR_ALL_PARTICIPANTS: 'xmpp.videoaccess_changed_for_all_participants',
+    VIDEO_ACCESS_CHANGED_FOR_ALL_PARTICIPANTS = 'xmpp.videoaccess_changed_for_all_participants',
 
     /**
      * Videoaccess prop has been changed for participant.
      */
-    RAISE_HAND_ACCESS_CHANGED_FOR_ALL_PARTICIPANTS: 'xmpp.raisehand_access_changed_for_all_participants',
+    RAISE_HAND_ACCESS_CHANGED_FOR_ALL_PARTICIPANTS = 'xmpp.raisehand_access_changed_for_all_participants',
 
     /**
      * Microphone prop has been changed for participant.
      */
-    MICROPHONE_ACCESS_CHANGED_FOR_PARTICIPANT: 'xmpp.microphone_access_changed_for_participant',
+    MICROPHONE_ACCESS_CHANGED_FOR_PARTICIPANT = 'xmpp.microphone_access_changed_for_participant',
 
     /**
      * Microphone prop has been changed for all participants.
      */
-    MICROPHONE_ACCESS_CHANGED_FOR_ALL_PARTICIPANTS: 'xmpp.microphone_access_changed_for_all_participants',
+    MICROPHONE_ACCESS_CHANGED_FOR_ALL_PARTICIPANTS = 'xmpp.microphone_access_changed_for_all_participants',
 
     /**
      * Screen share prop has been changed for participant.
      */
-    SCREEN_SHARING_ACCESS_CHANGED_FOR_PARTICIPANT: 'xmpp.screen_sharing_access_changed_for_participant',
+    SCREEN_SHARING_ACCESS_CHANGED_FOR_PARTICIPANT = 'xmpp.screen_sharing_access_changed_for_participant',
 
     /**
      * Chat room instance have been added to Strophe.emuc plugin.
@@ -197,14 +197,14 @@ export enum XMPPEvents {
 
     // Designates an event indicating that room is private and
     // participant is host, and password is retrieved.
-    MUC_SEC_VALUE_CHANGED_FOR_SPECIAL_ROOM: 'xmpp.muc_sec_value',
+    MUC_SEC_VALUE_CHANGED_FOR_SPECIAL_ROOM = 'xmpp.muc_sec_value',
 
     // Designates an event indicating that room is private or not and
     // participant is host or not.
-    MUC_ROOM_VISIBILITY_CHANGED: 'xmpp.muc_room_visibility_changed',
+    MUC_ROOM_VISIBILITY_CHANGED = 'xmpp.muc_room_visibility_changed',
 
     // Designates an event indicating that all features are changed.
-    MUC_ROOM_ALL_FEATURES_CHANGED: 'xmpp.muc_room_all_features_changed',
+    MUC_ROOM_ALL_FEATURES_CHANGED = 'xmpp.muc_room_all_features_changed',
 
     // Designates an event indicating that the MUC members only config has changed.
     MUC_MEMBERS_ONLY_CHANGED = 'xmpp.muc_members_only_changed',
@@ -334,11 +334,6 @@ export enum XMPPEvents {
     AV_MODERATION_REJECTED = 'xmpp.av_moderation.rejected',
 
     /**
-    * Event fired when we receive a message for AV moderation rejected for the local participant.
-    */
-    AV_MODERATION_REJECTED: 'xmpp.av_moderation.rejected',
-
-    /**
      * Event fired when we receive a message for AV moderation.
      */
     AV_MODERATION_RECEIVED = 'xmpp.av_moderation.received',
@@ -372,11 +367,6 @@ export enum XMPPEvents {
      * Event fired when the breakout rooms data was updated.
      */
     BREAKOUT_ROOMS_UPDATED = 'xmpp.breakout-rooms.updated',
-
-    /**
-     * Event fired when we receive message that a new jid was approved.
-     */
-    AV_MODERATION_PARTICIPANT_REJECTED: 'xmpp.av_moderation.participant.rejected',
 
     // Designates an event indicating that we should join the conference with
     // audio and/or video muted.
