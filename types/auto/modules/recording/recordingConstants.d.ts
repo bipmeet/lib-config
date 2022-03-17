@@ -2,6 +2,8 @@ declare namespace _default {
     namespace error {
         const BUSY: string;
         const ERROR: string;
+        const NOT_ALLOWED: string;
+        const POLICY_VIOLATION: string;
         const RESOURCE_CONSTRAINT: string;
         const UNEXPECTED_REQUEST: string;
         const SERVICE_UNAVAILABLE: string;

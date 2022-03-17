@@ -57,6 +57,9 @@ export default class ChatRoom extends Listenable {
     connectionTimes: {};
     participantPropertyListener: any;
     locked: boolean;
+    everybodyHasMicAccess: string;
+    everybodyHasCameraAccess: string;
+    everybodyCanRaiseHand: string;
     transcriptionStatus: JitsiTranscriptionStatus.JitsiTranscriptionStatus;
     /**
      *
@@ -195,6 +198,26 @@ export default class ChatRoom extends Listenable {
      * @param reason
      */
     kick(jid: any, reason?: string): void;
+    /**
+     * Value for broadcast audio permission
+     * @param iqValue
+     */
+    sendMicrophoneBroadcastPermissionIQ(iqValue: any): void;
+    /**
+     * Value for broadcast audio permission
+     * @param iqValue
+     */
+    sendCameraBroadcastPermissionIQ(iqValue: any): void;
+    /**
+     * Value for broadcast raising hand permission
+     * @param iqValue
+     */
+    sendRaiseHandBroadcastPermissionIQ(iqValue: any): void;
+    /**
+     * Value for broadcast audio permission
+     * @param iqValue
+     */
+    sendBroadcastPermissionIQ(key: any, iqValue: any): void;
     /**
      *
      * @param key

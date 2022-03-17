@@ -53,6 +53,20 @@ export default class JibriSession {
      */
     getMode(): string;
     /**
+     * Returns the package type for current jibri user.
+     *
+     * @returns {string}
+     */
+    getPackageType(): string;
+    /**
+     * Sets the last known error message related to the session.
+     *
+     * @param {string} packageType - Package type which is individual or corporate.
+     * @returns {void}
+     */
+    setPackageType(packageType: string): void;
+    _packageType: string;
+    /**
      * Sets the last known error message related to the session.
      *
      * @param {string} error - The error string explaining why the session

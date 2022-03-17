@@ -31,6 +31,30 @@ export declare enum XMPPEvents {
     CONNECTION_STATUS_CHANGED = "xmpp.connection.status.changed",
     DISPLAY_NAME_CHANGED = "xmpp.display_name_changed",
     /**
+     * Videoaccess prop has been changed for participant.
+     */
+    VIDEOACCESS_CHANGED_FOR_PARTICIPANT = "xmpp.videoaccess_changed_for_participant",
+    /**
+     * Videoaccess prop has been changed for participant.
+     */
+    VIDEO_ACCESS_CHANGED_FOR_ALL_PARTICIPANTS = "xmpp.videoaccess_changed_for_all_participants",
+    /**
+     * Videoaccess prop has been changed for participant.
+     */
+    RAISE_HAND_ACCESS_CHANGED_FOR_ALL_PARTICIPANTS = "xmpp.raisehand_access_changed_for_all_participants",
+    /**
+     * Microphone prop has been changed for participant.
+     */
+    MICROPHONE_ACCESS_CHANGED_FOR_PARTICIPANT = "xmpp.microphone_access_changed_for_participant",
+    /**
+     * Microphone prop has been changed for all participants.
+     */
+    MICROPHONE_ACCESS_CHANGED_FOR_ALL_PARTICIPANTS = "xmpp.microphone_access_changed_for_all_participants",
+    /**
+     * Screen share prop has been changed for participant.
+     */
+    SCREEN_SHARING_ACCESS_CHANGED_FOR_PARTICIPANT = "xmpp.screen_sharing_access_changed_for_participant",
+    /**
      * Chat room instance have been added to Strophe.emuc plugin.
      */
     EMUC_ROOM_ADDED = "xmpp.emuc_room_added",
@@ -83,6 +107,9 @@ export declare enum XMPPEvents {
     MUC_LEFT = "xmpp.muc_left",
     MUC_ROLE_CHANGED = "xmpp.muc_role_changed",
     MUC_LOCK_CHANGED = "xmpp.muc_lock_changed",
+    MUC_SEC_VALUE_CHANGED_FOR_SPECIAL_ROOM = "xmpp.muc_sec_value",
+    MUC_ROOM_VISIBILITY_CHANGED = "xmpp.muc_room_visibility_changed",
+    MUC_ROOM_ALL_FEATURES_CHANGED = "xmpp.muc_room_all_features_changed",
     MUC_MEMBERS_ONLY_CHANGED = "xmpp.muc_members_only_changed",
     PARTICIPANT_AUDIO_MUTED = "xmpp.audio_muted",
     PARTICIPANT_VIDEO_MUTED = "xmpp.video_muted",

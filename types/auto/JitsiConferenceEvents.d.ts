@@ -73,6 +73,30 @@ export declare enum JitsiConferenceEvents {
      */
     DISPLAY_NAME_CHANGED = "conference.displayNameChanged",
     /**
+     * Videoaccess has been changed for participant.
+     */
+    VIDEOACCESS_CHANGED_FOR_PARTICIPANT = "conference.videoAccessChangedForParticipant",
+    /**
+     * Videoaccess has been changed for all participants.
+     */
+    VIDEO_ACCESS_CHANGED_FOR_ALL_PARTICIPANTS = "conference.videoAccessChangedForAllParticipants",
+    /**
+     * Raise hande access has been changed for all participants.
+     */
+    RAISE_HAND_ACCESS_CHANGED_FOR_ALL_PARTICIPANTS = "conference.raiseHandAccessChangedForAllParticipants",
+    /**
+     * Microphone access has been changed for participant.
+     */
+    MICROPHONE_ACCESS_CHANGED_FOR_PARTICIPANT = "conference.microphoneAccessChangedForParticipant",
+    /**
+     * Microphone access has been changed for all participants.
+     */
+    MICROPHONE_ACCESS_CHANGED_FOR_ALL_PARTICIPANTS = "conference.microphoneAccessChangedForAllParticipants",
+    /**
+     * Screen share access has been changed for participant.
+     */
+    SCREEN_SHARING_ACCESS_CHANGED_FOR_PARTICIPANT = "conference.screenShareAccessChangedForParticipant",
+    /**
      * The dominant speaker was changed.
      */
     DOMINANT_SPEAKER_CHANGED = "conference.dominantSpeaker",
@@ -141,6 +165,18 @@ export declare enum JitsiConferenceEvents {
      * Indicates that the room has been locked or unlocked.
      */
     LOCK_STATE_CHANGED = "conference.lock_state_changed",
+    /**
+     * Indicates that the room is private, participant is host and password is retrieved.
+     */
+    SEC_VALUE_CHANGED_FOR_SPECIAL_ROOM = "conference.sec_value_changed_for_special_room",
+    /**
+     * Indicates that the room is private or not, and participant is host or not.
+     */
+    ROOM_VISIBILITY_CHANGED = "conference.room_visibility_changed",
+    /**
+     * Indicates that all features are changed.
+     */
+    ROOM_ALL_FEATURES_CHANGED = "conference.room_all_features_changed",
     /**
      * Indicates that the region of the media server (jitsi-videobridge) that we
      * are connected to changed (or was initially set).
@@ -408,6 +444,12 @@ export declare const CONNECTION_INTERRUPTED = JitsiConferenceEvents.CONNECTION_I
 export declare const CONNECTION_RESTORED = JitsiConferenceEvents.CONNECTION_RESTORED;
 export declare const DATA_CHANNEL_OPENED = JitsiConferenceEvents.DATA_CHANNEL_OPENED;
 export declare const DISPLAY_NAME_CHANGED = JitsiConferenceEvents.DISPLAY_NAME_CHANGED;
+export declare const VIDEOACCESS_CHANGED_FOR_PARTICIPANT = JitsiConferenceEvents.VIDEOACCESS_CHANGED_FOR_PARTICIPANT;
+export declare const VIDEO_ACCESS_CHANGED_FOR_ALL_PARTICIPANTS = JitsiConferenceEvents.VIDEO_ACCESS_CHANGED_FOR_ALL_PARTICIPANTS;
+export declare const RAISE_HAND_ACCESS_CHANGED_FOR_ALL_PARTICIPANTS = JitsiConferenceEvents.RAISE_HAND_ACCESS_CHANGED_FOR_ALL_PARTICIPANTS;
+export declare const MICROPHONE_ACCESS_CHANGED_FOR_PARTICIPANT = JitsiConferenceEvents.MICROPHONE_ACCESS_CHANGED_FOR_PARTICIPANT;
+export declare const MICROPHONE_ACCESS_CHANGED_FOR_ALL_PARTICIPANTS = JitsiConferenceEvents.MICROPHONE_ACCESS_CHANGED_FOR_ALL_PARTICIPANTS;
+export declare const SCREEN_SHARING_ACCESS_CHANGED_FOR_PARTICIPANT = JitsiConferenceEvents.SCREEN_SHARING_ACCESS_CHANGED_FOR_PARTICIPANT;
 export declare const DOMINANT_SPEAKER_CHANGED = JitsiConferenceEvents.DOMINANT_SPEAKER_CHANGED;
 export declare const CONFERENCE_CREATED_TIMESTAMP = JitsiConferenceEvents.CONFERENCE_CREATED_TIMESTAMP;
 export declare const DTMF_SUPPORT_CHANGED = JitsiConferenceEvents.DTMF_SUPPORT_CHANGED;
@@ -419,6 +461,9 @@ export declare const PARTICIPANT_KICKED = JitsiConferenceEvents.PARTICIPANT_KICK
 export declare const LAST_N_ENDPOINTS_CHANGED = JitsiConferenceEvents.LAST_N_ENDPOINTS_CHANGED;
 export declare const FORWARDED_SOURCES_CHANGED = JitsiConferenceEvents.FORWARDED_SOURCES_CHANGED;
 export declare const LOCK_STATE_CHANGED = JitsiConferenceEvents.LOCK_STATE_CHANGED;
+export declare const SEC_VALUE_CHANGED_FOR_SPECIAL_ROOM = JitsiConferenceEvents.SEC_VALUE_CHANGED_FOR_SPECIAL_ROOM;
+export declare const ROOM_VISIBILITY_CHANGED = JitsiConferenceEvents.ROOM_VISIBILITY_CHANGED;
+export declare const ROOM_ALL_FEATURES_CHANGED = JitsiConferenceEvents.ROOM_ALL_FEATURES_CHANGED;
 export declare const SERVER_REGION_CHANGED = JitsiConferenceEvents.SERVER_REGION_CHANGED;
 export declare const _MEDIA_SESSION_STARTED = JitsiConferenceEvents._MEDIA_SESSION_STARTED;
 export declare const _MEDIA_SESSION_ACTIVE_CHANGED = JitsiConferenceEvents._MEDIA_SESSION_ACTIVE_CHANGED;

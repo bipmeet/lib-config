@@ -594,6 +594,9 @@ declare class JitsiConference {
      * @param {string} reason reason of the participant to kick
      */
     kickParticipant(id: string, reason: string): void;
+    sendMicrophoneBroadcastPermissionIQ(value: any): void;
+    sendCameraBroadcastPermissionIQ(value: any): void;
+    sendRaiseHandBroadcastPermissionIQ(value: any): void;
     private _maybeClearSITimeout;
     _sessionInitiateTimeout: any;
     private _maybeSetSITimeout;
