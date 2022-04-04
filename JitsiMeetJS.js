@@ -356,7 +356,7 @@ export default _mergeNamespaceAndModule({
                 for (const track of tracks) {
                     if (track.type === MediaType.VIDEO
                         && track.videoType === 'desktop') {
-                        this.setVideoTrackContentHints(track.track, 'detail');
+                        this.setVideoTrackContentHints(track.track, 'text');
                     }
                 }
 
