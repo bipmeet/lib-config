@@ -69,7 +69,7 @@
     "test-watch": "karma start karma.conf.js --no-single-run",
     "validate": "npm ls",
     "watch": "webpack --config webpack.config.js --watch --mode development",
-    "postinstall": "export LIB_JITSI_MEET_COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null) && webpack && tsc"
+    "postinstall": "export LIB_JITSI_MEET_COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null) && webpack"
   },
   "browser": "dist/umd/lib-jitsi-meet.min.js",
   "module": "dist/esm/JitsiMeetJS.js",
