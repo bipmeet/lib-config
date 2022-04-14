@@ -321,7 +321,9 @@ export default class ChatRoom extends Listenable {
 
             const roomOwner = $(result).find('>query>feature[var="muc_bip_owner"]').length === 1;
 
-            this.eventEmitter.emit(XMPPEvents.MUC_ROOM_VISIBILITY_CHANGED, specialRoom, roomOwner);
+            const externalScheduled = $(result).find('>query>feature[var="muc_bip_external_scheduled"]').length === 1;
+
+            this.eventEmitter.emit(XMPPEvents.MUC_ROOM_VISIBILITY_CHANGED, specialRoom, roomOwner, externalScheduled);
 
             const everybodyHasMicAccess
                 = $(result).find('>query>x[type="result"]>field[var="muc#roomconfig_bip_allow_microphone"]>value')
