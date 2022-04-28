@@ -1366,9 +1366,7 @@ JitsiConference.prototype._setupNewTrack = function(newTrack) {
     if (newTrack.isAudioTrack()) {
         newTrack.audioLevelHandler = this._fireAudioLevelChangeEvent.bind(this);
         newTrack.addEventListener(JitsiTrackEvents.TRACK_AUDIO_LEVEL_CHANGED, newTrack.audioLevelHandler);
-        this.room.setAudioMute(newTrack.isMuted());
-    } else {
-        this.room.setVideoMute(newTrack.isMuted());
+        this.room.addAudioInfoToPresence(newTrack.isMuted()) && this.room.sendPresence();
     }
 
     this.eventEmitter.emit(JitsiConferenceEvents.TRACK_ADDED, newTrack);
