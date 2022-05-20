@@ -827,3 +827,4 @@ JitsiConferenceEventManager.prototype.setupStatisticsListeners = function() {
         });
     }
 };
+
