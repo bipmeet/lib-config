@@ -293,6 +293,20 @@ export default class TraceablePeerConnection {
      */
     isSimulcastOn(): boolean;
     /**
+     * Handles remote source mute and unmute changed events.
+     *
+     * @param {string} sourceName - The name of the remote source.
+     * @param {boolean} isMuted - The new mute state.
+     */
+    _sourceMutedChanged(sourceName: string, isMuted: boolean): void;
+    /**
+     * Handles remote source videoType changed events.
+     *
+     * @param {string} sourceName - The name of the remote source.
+     * @param {boolean} isMuted - The new value.
+     */
+    _sourceVideoTypeChanged(sourceName: string, videoType: any): void;
+    /**
      * Obtains audio levels of the remote audio tracks by getting the source information on the RTCRtpReceivers.
      * The information relevant to the ssrc is updated each time a RTP packet constaining the ssrc is received.
      * @param {Array<string>} speakerList list of endpoint ids for which audio levels are to be gathered.
@@ -386,10 +400,7 @@ export default class TraceablePeerConnection {
      * @param {boolean} muted the initial muted status
      * @param {String} sourceName the track's source name
      */
-    _createRemoteTrack(ownerEndpointId: string, stream: MediaStream, track: MediaStreamTrack, mediaType: MediaType, videoType?: {
-        CAMERA: string;
-        DESKTOP: string;
-    }, ssrc: number, muted: boolean, sourceName: string): void;
+    _createRemoteTrack(ownerEndpointId: string, stream: MediaStream, track: MediaStreamTrack, mediaType: MediaType, videoType?: VideoType, ssrc: number, muted: boolean, sourceName: string): void;
     /**
      * Handles remote stream removal.
      * @param stream the WebRTC MediaStream object which is being removed from the
@@ -430,14 +441,12 @@ export default class TraceablePeerConnection {
      */
     getLocalSSRC(localTrack: any): number;
     /**
-     * When doing unified plan simulcast, we'll have a set of ssrcs with the
-     * same msid but no ssrc-group, since unified plan signals the simulcast
-     * group via the a=simulcast line.  Unfortunately, Jicofo will complain
-     * if it sees ssrcs with matching msids but no ssrc-group, so we'll inject
-     * an ssrc-group line to make Jicofo happy.
+     * When doing unified plan simulcast, we'll have a set of ssrcs but no ssrc-groups on Firefox. Unfortunately, Jicofo
+     * will complain if it sees ssrcs with matching msids but no ssrc-group, so a ssrc-group line is injected to make
+     * Jicofo happy.
+     *
      * @param desc A session description object (with 'type' and 'sdp' fields)
-     * @return A session description object with its sdp field modified to
-     * contain an inject ssrc-group for simulcast
+     * @return A session description object with its sdp field modified to contain an inject ssrc-group for simulcast.
      */
     _injectSsrcGroupForUnifiedSimulcast(desc: any): any;
     _getSSRC(rtcId: any): {
@@ -778,3 +787,4 @@ import { TPCUtils } from "./TPCUtils";
 import SdpConsistency from "../sdp/SdpConsistency";
 import LocalSdpMunger from "../sdp/LocalSdpMunger";
 import RtxModifier from "../sdp/RtxModifier";
+import { VideoType } from "../../service/RTC/VideoType";

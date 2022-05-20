@@ -3,12 +3,12 @@ import { Interop } from '@jitsi/sdp-interop';
 import transform from 'sdp-transform';
 
 import * as CodecMimeType from '../../service/RTC/CodecMimeType';
-import MediaDirection from '../../service/RTC/MediaDirection';
+import { MediaDirection } from '../../service/RTC/MediaDirection';
 import { MediaType } from '../../service/RTC/MediaType';
 import RTCEvents from '../../service/RTC/RTCEvents';
 import * as SignalingEvents from '../../service/RTC/SignalingEvents';
 import { getSourceNameForJitsiTrack } from '../../service/RTC/SignalingLayer';
-import * as VideoType from '../../service/RTC/VideoType';
+import { VideoType } from '../../service/RTC/VideoType';
 import { SS_DEFAULT_FRAME_RATE } from '../RTC/ScreenObtainer';
 import browser from '../browser';
 import FeatureFlags from '../flags/FeatureFlags';
@@ -205,15 +205,17 @@ export default function TraceablePeerConnection(
 
     // SignalingLayer listeners
     this._peerVideoTypeChanged = this._peerVideoTypeChanged.bind(this);
-    this.signalingLayer.on(
-        SignalingEvents.PEER_VIDEO_TYPE_CHANGED,
-        this._peerVideoTypeChanged);
+    this.signalingLayer.on(SignalingEvents.PEER_VIDEO_TYPE_CHANGED, this._peerVideoTypeChanged);
 
     this._peerMutedChanged = this._peerMutedChanged.bind(this);
-    this.signalingLayer.on(
-        SignalingEvents.PEER_MUTED_CHANGED,
-        this._peerMutedChanged);
+    this.signalingLayer.on(SignalingEvents.PEER_MUTED_CHANGED, this._peerMutedChanged);
     this.options = options;
+
+    // Setup SignalingLayer listeners for source-name based events.
+    this.signalingLayer.on(SignalingEvents.SOURCE_MUTED_CHANGED,
+        (sourceName, isMuted) => this._sourceMutedChanged(sourceName, isMuted));
+    this.signalingLayer.on(SignalingEvents.SOURCE_VIDEO_TYPE_CHANGED,
+        (sourceName, videoType) => this._sourceVideoTypeChanged(sourceName, videoType));
 
     // Make sure constraints is properly formatted in order to provide information about whether or not this
     // connection is P2P to rtcstats.
@@ -530,9 +532,7 @@ TraceablePeerConnection.prototype.isSimulcastOn = function() {
  * @param {VideoType} videoType the new value
  * @private
  */
-TraceablePeerConnection.prototype._peerVideoTypeChanged = function(
-        endpointId,
-        videoType) {
+TraceablePeerConnection.prototype._peerVideoTypeChanged = function(endpointId, videoType) {
     // Check if endpointId has a value to avoid action on random track
     if (!endpointId) {
         logger.error(`${this} No endpointID on peerVideoTypeChanged`);
@@ -554,10 +554,7 @@ TraceablePeerConnection.prototype._peerVideoTypeChanged = function(
  * @param {boolean} isMuted the new mute state
  * @private
  */
-TraceablePeerConnection.prototype._peerMutedChanged = function(
-        endpointId,
-        mediaType,
-        isMuted) {
+TraceablePeerConnection.prototype._peerMutedChanged = function(endpointId, mediaType, isMuted) {
     // Check if endpointId is a value to avoid doing action on all remote tracks
     if (!endpointId) {
         logger.error(`${this} On peerMuteChanged - no endpoint ID`);
@@ -570,6 +567,38 @@ TraceablePeerConnection.prototype._peerMutedChanged = function(
         // NOTE 1 track per media type is assumed
         track[0].setMute(isMuted);
     }
+};
+
+/**
+ * Handles remote source mute and unmute changed events.
+ *
+ * @param {string} sourceName - The name of the remote source.
+ * @param {boolean} isMuted - The new mute state.
+ */
+TraceablePeerConnection.prototype._sourceMutedChanged = function(sourceName, isMuted) {
+    const track = this.getRemoteTracks().find(t => t.getSourceName() === sourceName);
+
+    if (!track) {
+        return;
+    }
+
+    track.setMute(isMuted);
+};
+
+/**
+ * Handles remote source videoType changed events.
+ *
+ * @param {string} sourceName - The name of the remote source.
+ * @param {boolean} isMuted - The new value.
+ */
+TraceablePeerConnection.prototype._sourceVideoTypeChanged = function(sourceName, videoType) {
+    const track = this.getRemoteTracks().find(t => t.getSourceName() === sourceName);
+
+    if (!track) {
+        return;
+    }
+
+    track._setVideoType(videoType);
 };
 
 /**
@@ -923,8 +952,7 @@ TraceablePeerConnection.prototype._remoteTrackAdded = function(stream, track, tr
     logger.info(`${this} creating remote track[endpoint=${ownerEndpointId},ssrc=${trackSsrc},`
         + `type=${mediaType},sourceName=${sourceName}]`);
 
-    const peerMediaInfo
-        = this.signalingLayer.getPeerMediaInfo(ownerEndpointId, mediaType);
+    const peerMediaInfo = this.signalingLayer.getPeerMediaInfo(ownerEndpointId, mediaType, sourceName);
 
     if (!peerMediaInfo) {
         GlobalOnErrorHandler.callErrorHandler(
@@ -1400,54 +1428,56 @@ TraceablePeerConnection.prototype.getLocalSSRC = function(localTrack) {
 };
 
 /**
- * When doing unified plan simulcast, we'll have a set of ssrcs with the
- * same msid but no ssrc-group, since unified plan signals the simulcast
- * group via the a=simulcast line.  Unfortunately, Jicofo will complain
- * if it sees ssrcs with matching msids but no ssrc-group, so we'll inject
- * an ssrc-group line to make Jicofo happy.
+ * When doing unified plan simulcast, we'll have a set of ssrcs but no ssrc-groups on Firefox. Unfortunately, Jicofo
+ * will complain if it sees ssrcs with matching msids but no ssrc-group, so a ssrc-group line is injected to make
+ * Jicofo happy.
+ *
  * @param desc A session description object (with 'type' and 'sdp' fields)
- * @return A session description object with its sdp field modified to
- * contain an inject ssrc-group for simulcast
+ * @return A session description object with its sdp field modified to contain an inject ssrc-group for simulcast.
  */
-TraceablePeerConnection.prototype._injectSsrcGroupForUnifiedSimulcast
-    = function(desc) {
-        const sdp = transform.parse(desc.sdp);
-        const video = sdp.media.find(mline => mline.type === 'video');
+TraceablePeerConnection.prototype._injectSsrcGroupForUnifiedSimulcast = function(desc) {
+    const sdp = transform.parse(desc.sdp);
+    const video = sdp.media.find(mline => mline.type === 'video');
 
-        // Check if the browser supports RTX, add only the primary ssrcs to the SIM group if that is the case.
-        video.ssrcGroups = video.ssrcGroups || [];
-        const fidGroups = video.ssrcGroups.filter(group => group.semantics === 'FID');
+    // Check if the browser supports RTX, add only the primary ssrcs to the SIM group if that is the case.
+    video.ssrcGroups = video.ssrcGroups || [];
+    const fidGroups = video.ssrcGroups.filter(group => group.semantics === 'FID');
 
-        if (video.simulcast || video.simulcast_03) {
-            const ssrcs = [];
+    if (video.simulcast || video.simulcast_03) {
+        const ssrcs = [];
 
-            if (fidGroups && fidGroups.length) {
-                fidGroups.forEach(group => {
-                    ssrcs.push(group.ssrcs.split(' ')[0]);
-                });
-            } else {
-                video.ssrcs.forEach(ssrc => {
-                    if (ssrc.attribute === 'msid') {
-                        ssrcs.push(ssrc.id);
-                    }
-                });
-            }
-            if (video.ssrcGroups.find(group => group.semantics === 'SIM')) {
-                // Group already exists, no need to do anything
-                return desc;
-            }
+        if (fidGroups && fidGroups.length) {
+            fidGroups.forEach(group => {
+                ssrcs.push(group.ssrcs.split(' ')[0]);
+            });
+        } else {
+            video.ssrcs.forEach(ssrc => {
+                if (ssrc.attribute === 'msid') {
+                    ssrcs.push(ssrc.id);
+                }
+            });
+        }
+        if (video.ssrcGroups.find(group => group.semantics === 'SIM')) {
+            // Group already exists, no need to do anything
+            return desc;
+        }
+
+        // Add a SIM group for every 3 FID groups.
+        for (let i = 0; i < ssrcs.length; i += 3) {
+            const simSsrcs = ssrcs.slice(i, i + 3);
 
             video.ssrcGroups.push({
                 semantics: 'SIM',
-                ssrcs: ssrcs.join(' ')
+                ssrcs: simSsrcs.join(' ')
             });
         }
+    }
 
-        return new RTCSessionDescription({
-            type: desc.type,
-            sdp: transform.write(sdp)
-        });
-    };
+    return new RTCSessionDescription({
+        type: desc.type,
+        sdp: transform.write(sdp)
+    });
+};
 
 /* eslint-disable-next-line vars-on-top */
 const getters = {
@@ -1944,7 +1974,14 @@ TraceablePeerConnection.prototype.replaceTrack = function(oldTrack, newTrack) {
     // Jicofo before the mute state is sent over presence. Therefore, trigger a renegotiation in this case. If we
     // rely on "negotiationneeded" fired by the browser to signal new ssrcs, the mute state in presence will be sent
     // before the source signaling which is undesirable.
-    const negotiationNeeded = Boolean(!oldTrack || !this.localTracks.has(oldTrack?.rtcId));
+    // Send the presence before signaling for a new screenshare source. This is needed for multi-stream support since
+    // videoType needs to be availble at remote track creation time so that a fake tile for screenshare can be added.
+    // FIXME - This check needs to be removed when the client switches to the bridge based signaling for tracks.
+    const isNewTrackScreenshare = !oldTrack
+        && newTrack?.getVideoType() === VideoType.DESKTOP
+        && FeatureFlags.isMultiStreamSupportEnabled()
+        && !this.isP2P; // negotiationneeded is not fired on p2p peerconnection
+    const negotiationNeeded = !isNewTrackScreenshare && Boolean(!oldTrack || !this.localTracks.has(oldTrack?.rtcId));
 
     if (this._usesUnifiedPlan) {
         logger.debug(`${this} TPC.replaceTrack using unified plan`);
@@ -1961,6 +1998,17 @@ TraceablePeerConnection.prototype.replaceTrack = function(oldTrack, newTrack) {
             .then(transceiver => {
                 oldTrack && this.localTracks.delete(oldTrack.rtcId);
                 newTrack && this.localTracks.set(newTrack.rtcId, newTrack);
+
+                // Update the local SSRC cache for the case when one track gets replaced with another and no
+                // renegotiation is triggered as a result of this.
+                if (oldTrack && newTrack) {
+                    const oldTrackSSRC = this.localSSRCs.get(oldTrack.rtcId);
+
+                    if (oldTrackSSRC) {
+                        this.localSSRCs.delete(oldTrack.rtcId);
+                        this.localSSRCs.set(newTrack.rtcId, oldTrackSSRC);
+                    }
+                }
                 const mediaActive = mediaType === MediaType.AUDIO
                     ? this.audioTransferActive
                     : this.videoTransferActive;
@@ -1970,6 +2018,8 @@ TraceablePeerConnection.prototype.replaceTrack = function(oldTrack, newTrack) {
                 // this connection again.
                 if (transceiver && mediaActive) {
                     transceiver.direction = newTrack ? MediaDirection.SENDRECV : MediaDirection.RECVONLY;
+                } else if (transceiver) {
+                    transceiver.direction = MediaDirection.INACTIVE;
                 }
 
                 // Avoid configuring the encodings on Chromium/Safari until simulcast is configured
@@ -2008,11 +2058,9 @@ TraceablePeerConnection.prototype.replaceTrack = function(oldTrack, newTrack) {
 TraceablePeerConnection.prototype.removeTrackMute = function(localTrack) {
     const webRtcStream = localTrack.getOriginalStream();
 
-    this.trace(
-        'removeStreamMute',
-        localTrack.rtcId, webRtcStream ? webRtcStream.id : null);
+    this.trace('removeTrackMute', localTrack.rtcId, webRtcStream ? webRtcStream.id : null);
 
-    if (!this._assertTrackBelongs('removeStreamMute', localTrack)) {
+    if (!this._assertTrackBelongs('removeTrackMute', localTrack)) {
         // Abort - nothing to be done here
         return Promise.reject('Track not found in the peerconnection');
     }
@@ -2028,7 +2076,7 @@ TraceablePeerConnection.prototype.removeTrackMute = function(localTrack) {
         return Promise.resolve(true);
     }
 
-    logger.error(`${this} removeStreamMute - no WebRTC stream for track=${localTrack}`);
+    logger.error(`${this} removeTrackMute - no WebRTC stream for track=${localTrack}`);
 
     return Promise.reject('Stream not found');
 };

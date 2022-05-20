@@ -4,7 +4,7 @@ import { Strophe } from 'strophe.js';
 import { MediaType } from '../../service/RTC/MediaType';
 import * as SignalingEvents from '../../service/RTC/SignalingEvents';
 import SignalingLayer, { getMediaTypeFromSourceName } from '../../service/RTC/SignalingLayer';
-import VideoType from '../../service/RTC/VideoType';
+import { VideoType } from '../../service/RTC/VideoType';
 import { XMPPEvents } from '../../service/xmpp/XMPPEvents';
 import FeatureFlags from '../flags/FeatureFlags';
 
@@ -218,10 +218,8 @@ export default class SignalingLayerImpl extends SignalingLayer {
 
                 if (oldSourceState.muted !== newMutedState) {
                     oldSourceState.muted = newMutedState;
-                    if (emitEventsFromHere && mediaType === MediaType.AUDIO) {
-                        emitAudioMutedEvent(endpointId, newMutedState);
-                    } else {
-                        emitVideoMutedEvent(endpointId, newMutedState);
+                    if (emitEventsFromHere && !this._localSourceState[sourceName]) {
+                        this.eventEmitter.emit(SignalingEvents.SOURCE_MUTED_CHANGED, sourceName, newMutedState);
                     }
                 }
 
@@ -233,11 +231,11 @@ export default class SignalingLayerImpl extends SignalingLayer {
                 if (oldSourceState.videoType !== newVideoType) {
                     oldSourceState.videoType = newVideoType;
 
-                    // videoType is not allowed to change on a given JitsiLocalTrack when multi stream support is
-                    // enabled.
-                    emitEventsFromHere
-                        && !FeatureFlags.isMultiStreamSupportEnabled()
-                        && emitVideoTypeEvent(endpointId, newVideoType);
+                    // Since having a mix of eps that do/don't support multi-stream in the same call is supported, emit
+                    // SOURCE_VIDEO_TYPE_CHANGED event when the remote source changes videoType.
+                    if (emitEventsFromHere && !this._localSourceState[sourceName]) {
+                        this.eventEmitter.emit(SignalingEvents.SOURCE_VIDEO_TYPE_CHANGED, sourceName, newVideoType);
+                    }
                 }
             }
 
@@ -298,23 +296,26 @@ export default class SignalingLayerImpl extends SignalingLayer {
     /**
      * @inheritDoc
      */
-    getPeerMediaInfo(owner, mediaType) {
+    getPeerMediaInfo(owner, mediaType, sourceName) {
         const legacyGetPeerMediaInfo = () => {
             if (this.chatRoom) {
                 return this.chatRoom.getMediaPresenceInfo(owner, mediaType);
             }
             logger.error('Requested peer media info, before room was set');
         };
+        const lastPresence = this.chatRoom.getLastPresence(owner);
+
+        if (!lastPresence) {
+            throw new Error(`getPeerMediaInfo - no presence stored for: ${owner}`);
+        }
 
         if (FeatureFlags.isSourceNameSignalingEnabled()) {
-            const lastPresence = this.chatRoom.getLastPresence(owner);
-
-            if (!lastPresence) {
-                throw new Error(`getPeerMediaInfo - no presence stored for: ${owner}`);
-            }
-
             if (!this._doesEndpointSendNewSourceInfo(owner)) {
                 return legacyGetPeerMediaInfo();
+            }
+
+            if (sourceName) {
+                return this.getPeerSourceInfo(owner, sourceName);
             }
 
             /**
@@ -351,7 +352,14 @@ export default class SignalingLayerImpl extends SignalingLayer {
      * @inheritDoc
      */
     getPeerSourceInfo(owner, sourceName) {
-        return this._remoteSourceState[owner] ? this._remoteSourceState[owner][sourceName] : undefined;
+        const mediaInfo = {
+            muted: true, // muted by default
+            videoType: VideoType.CAMERA // 'camera' by default
+        };
+
+        return this._remoteSourceState[owner]
+            ? this._remoteSourceState[owner][sourceName] ?? mediaInfo
+            : undefined;
     }
 
     /**
