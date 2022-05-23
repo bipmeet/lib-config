@@ -8,7 +8,7 @@ import Statistics from './modules/statistics/statistics';
 import EventEmitterForwarder from './modules/util/EventEmitterForwarder';
 import { MediaType } from './service/RTC/MediaType';
 import RTCEvents from './service/RTC/RTCEvents';
-import VideoType from './service/RTC/VideoType';
+import { VideoType } from './service/RTC/VideoType';
 import AuthenticationEvents
     from './service/authentication/AuthenticationEvents';
 import {
@@ -207,6 +207,7 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
     this.chatRoomForwarder.forward(XMPPEvents.ROOM_MAX_USERS_ERROR,
         JitsiConferenceEvents.CONFERENCE_FAILED,
         JitsiConferenceErrors.CONFERENCE_MAX_USERS);
+    chatRoom.addListener(XMPPEvents.ROOM_MAX_USERS_ERROR, () => conference.leave());
 
     this.chatRoomForwarder.forward(XMPPEvents.PASSWORD_REQUIRED,
         JitsiConferenceEvents.CONFERENCE_FAILED,
@@ -233,10 +234,7 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
         JitsiConferenceErrors.RESERVATION_ERROR);
 
     // TO DO
-    // chatRoom.addListener(XMPPEvents.RESERVATION_ERROR,
-    //     () => {
-    //         conference.xmpp.connection.emuc.doLeave(conference.room.roomjid);
-    //     });
+    // chatRoom.addListener(XMPPEvents.RESERVATION_ERROR, () => conference.leave());
 
     this.chatRoomForwarder.forward(XMPPEvents.GRACEFUL_SHUTDOWN,
         JitsiConferenceEvents.CONFERENCE_FAILED,
@@ -250,6 +248,7 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
     this.chatRoomForwarder.forward(XMPPEvents.MUC_DESTROYED,
         JitsiConferenceEvents.CONFERENCE_FAILED,
         JitsiConferenceErrors.CONFERENCE_DESTROYED);
+    chatRoom.addListener(XMPPEvents.MUC_DESTROYED, () => conference.leave());
 
     this.chatRoomForwarder.forward(XMPPEvents.CHAT_ERROR_RECEIVED,
         JitsiConferenceEvents.CONFERENCE_ERROR,
