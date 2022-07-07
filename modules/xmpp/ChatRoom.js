@@ -1171,6 +1171,9 @@ export default class ChatRoom extends Listenable {
         // xep-0203 delay
         let stamp = $(msg).find('>delay').attr('stamp');
 
+        // nickName
+        const nickName = $(msg).find('>delay').attr('nickname');
+
         if (!stamp) {
             // or xep-0091 delay, UTC timestamp
             stamp = $(msg).find('>[xmlns="jabber:x:delay"]').attr('stamp');
@@ -1225,7 +1228,7 @@ export default class ChatRoom extends Listenable {
                         from, txt, this.myroomjid, stamp);
             } else if (type === 'groupchat') {
                 this.eventEmitter.emit(XMPPEvents.MESSAGE_RECEIVED,
-                        from, txt, this.myroomjid, stamp);
+                        from, txt, this.myroomjid, stamp, nickName);
             }
         }
     }
