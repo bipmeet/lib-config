@@ -1157,7 +1157,7 @@ TraceablePeerConnection.prototype._removeRemoteTrack = function(toBeRemoved) {
  */
 TraceablePeerConnection.prototype._extractSSRCMap = function(desc) {
     /**
-     * Track SSRC infos mapped by stream ID (msid) or mediaType (unfied-plan)
+     * Track SSRC infos mapped by stream ID (msid) or mediaType (unified-plan)
      * @type {Map<string,TrackSSRCInfo>}
      */
     const ssrcMap = new Map();
@@ -1186,13 +1186,20 @@ TraceablePeerConnection.prototype._extractSSRCMap = function(desc) {
     // For unified plan clients, only the first audio and video mlines will have ssrcs for the local sources.
     // The rest of the m-lines are for the recv-only sources, one for each remote source.
     if (this._usesUnifiedPlan) {
-        media = [];
-        [ MediaType.AUDIO, MediaType.VIDEO ].forEach(mediaType => {
-            const mLine = session.media.find(m => m.type === mediaType);
+        if (FeatureFlags.isMultiStreamSupportEnabled()) {
+            media = media.filter(mline => mline.direction === MediaDirection.SENDONLY
+                || mline.direction === MediaDirection.SENDRECV);
+        } else {
+            media = [];
+            [ MediaType.AUDIO, MediaType.VIDEO ].forEach(mediaType => {
+                const mLine = session.media.find(m => m.type === mediaType);
 
-            mLine && media.push(mLine);
-        });
+                mLine && media.push(mLine);
+            });
+        }
     }
+
+    let index = 0;
 
     for (const mLine of media) {
         if (!Array.isArray(mLine.ssrcs)) {
@@ -1201,8 +1208,7 @@ TraceablePeerConnection.prototype._extractSSRCMap = function(desc) {
 
         if (Array.isArray(mLine.ssrcGroups)) {
             for (const group of mLine.ssrcGroups) {
-                if (typeof group.semantics !== 'undefined'
-                    && typeof group.ssrcs !== 'undefined') {
+                if (typeof group.semantics !== 'undefined' && typeof group.ssrcs !== 'undefined') {
                     // Parse SSRCs and store as numbers
                     const groupSSRCs = group.ssrcs.split(' ').map(ssrcStr => parseInt(ssrcStr, 10));
                     const primarySSRC = groupSSRCs[0];
@@ -1231,7 +1237,9 @@ TraceablePeerConnection.prototype._extractSSRCMap = function(desc) {
             // the standard and the unified plan SDPs do not have a proper msid attribute for the sources.
             // Also the ssrcs for sources do not change for Unified plan clients since RTCRtpSender#replaceTrack is
             // used for switching the tracks so it is safe to use the mediaType as the key for the TrackSSRCInfo map.
-            const key = this._usesUnifiedPlan ? mLine.type : ssrc.value;
+            const key = this._usesUnifiedPlan
+                ? FeatureFlags.isMultiStreamSupportEnabled() ? `${mLine.type}-${index}` : mLine.type
+                : ssrc.value;
             const ssrcNumber = ssrc.id;
             let ssrcInfo = ssrcMap.get(key);
 
@@ -1253,6 +1261,9 @@ TraceablePeerConnection.prototype._extractSSRCMap = function(desc) {
                 }
             }
         }
+
+        // Currently multi-stream is supported for video only.
+        mLine.type === MediaType.VIDEO && index++;
     }
 
     return ssrcMap;
@@ -2017,7 +2028,21 @@ TraceablePeerConnection.prototype.replaceTrack = function(oldTrack, newTrack) {
                 // the client is using the p2p connection. Transceiver direction is updated when media is resumed on
                 // this connection again.
                 if (transceiver && mediaActive) {
-                    transceiver.direction = newTrack ? MediaDirection.SENDRECV : MediaDirection.RECVONLY;
+                    // In the scenario where we remove the oldTrack (oldTrack is not null and newTrack is null) on FF
+                    // if we change the direction to RECVONLY, create answer will generate SDP with only 1 receive
+                    // only ssrc instead of keeping all 6 ssrcs that we currently have. Stopping the screen sharing
+                    // and then starting it again will trigger 2 rounds of source-remove and source-add replacing
+                    // the 6 ssrcs for the screen sharing with 1 receive only ssrc and then removing the receive
+                    // only ssrc and adding the same 6 ssrcs. On the remote participant's side the same ssrcs will
+                    // be reused on a new m-line and if the remote participant is FF due to
+                    // https://bugzilla.mozilla.org/show_bug.cgi?id=1768729 the video stream won't be rendered.
+                    // That's why we need keep the direction to SENDRECV for FF.
+                    //
+                    // NOTE: If we return back to the approach of not removing the track for FF and instead using the
+                    // enabled property for mute or stopping screensharing we may need to change the direction to
+                    // RECVONLY if FF still sends the media even though the enabled flag is set to false.
+                    transceiver.direction
+                        = newTrack || browser.isFirefox() ? MediaDirection.SENDRECV : MediaDirection.RECVONLY;
                 } else if (transceiver) {
                     transceiver.direction = MediaDirection.INACTIVE;
                 }
@@ -2274,6 +2299,28 @@ TraceablePeerConnection.prototype._mungeOpus = function(description) {
 };
 
 /**
+ * Munges the SDP to set all directions to inactive and drop all ssrc and ssrc-groups.
+ *
+ * @param {RTCSessionDescription} description that needs to be munged.
+ * @returns {RTCSessionDescription} the munged description.
+ */
+TraceablePeerConnection.prototype._mungeInactive = function(description) {
+    const parsedSdp = transform.parse(description.sdp);
+    const mLines = parsedSdp.media;
+
+    for (const mLine of mLines) {
+        mLine.direction = MediaDirection.INACTIVE;
+        mLine.ssrcs = undefined;
+        mLine.ssrcGroups = undefined;
+    }
+
+    return new RTCSessionDescription({
+        type: description.type,
+        sdp: transform.write(parsedSdp)
+    });
+};
+
+/**
  * Sets up the _dtlsTransport object and initializes callbacks for it.
  */
 TraceablePeerConnection.prototype._initializeDtlsTransport = function() {
@@ -2415,12 +2462,12 @@ TraceablePeerConnection.prototype.setRemoteDescription = function(description) {
 
             remoteDescription = this.interop.toUnifiedPlan(remoteDescription, currentDescription);
             this.trace('setRemoteDescription::postTransform (Unified)', dumpSDP(remoteDescription));
+
+            if (FeatureFlags.isRunInLiteModeEnabled()) {
+                remoteDescription = this._mungeInactive(remoteDescription);
+            }
         }
         if (this.isSimulcastOn()) {
-            // Implode the simulcast ssrcs so that the remote sdp has only the first ssrc in the SIM group.
-            remoteDescription = this.simulcast.mungeRemoteDescription(remoteDescription);
-            this.trace('setRemoteDescription::postTransform (simulcast)', dumpSDP(remoteDescription));
-
             remoteDescription = this.tpcUtils.insertUnifiedPlanSimulcastReceive(remoteDescription);
             this.trace('setRemoteDescription::postTransform (sim receive)', dumpSDP(remoteDescription));
         }
@@ -2896,7 +2943,17 @@ TraceablePeerConnection.prototype._extractPrimarySSRC = function(ssrcObj) {
  */
 TraceablePeerConnection.prototype._processLocalSSRCsMap = function(ssrcMap) {
     for (const track of this.localTracks.values()) {
-        const sourceIdentifier = this._usesUnifiedPlan ? track.getType() : track.storedMSID;
+        let sourceIndex, sourceName;
+
+        if (FeatureFlags.isMultiStreamSupportEnabled()) {
+            sourceName = track.getSourceName();
+            sourceIndex = sourceName?.indexOf('-') + 2;
+        }
+
+        const sourceIdentifier = this._usesUnifiedPlan
+            ? FeatureFlags.isMultiStreamSupportEnabled() && sourceIndex
+                ? `${track.getType()}-${sourceName.substr(sourceIndex, 1)}` : track.getType()
+            : track.storedMSID;
 
         if (ssrcMap.has(sourceIdentifier)) {
             const newSSRC = ssrcMap.get(sourceIdentifier);
