@@ -606,9 +606,10 @@ JitsiConference.prototype.isP2PTestModeEnabled = function() {
 
 /**
  * Leaves the conference.
+ * @param reason {string|undefined} The reason for leaving the conference.
  * @returns {Promise}
  */
-JitsiConference.prototype.leave = async function() {
+JitsiConference.prototype.leave = async function(reason) {
     if (this.participantConnectionStatus) {
         this.participantConnectionStatus.dispose();
         this.participantConnectionStatus = null;
@@ -654,7 +655,7 @@ JitsiConference.prototype.leave = async function() {
 
     // Leave the conference. If this.room == null we are calling second time leave().
     if (!this.room) {
-        throw new Error('The conference is has been already left');
+        throw new Error('You have already left the conference');
     }
 
     const room = this.room;
@@ -689,7 +690,7 @@ JitsiConference.prototype.leave = async function() {
     let leaveError;
 
     try {
-        await room.leave();
+        await room.leave(reason);
     } catch (err) {
         leaveError = err;
 
@@ -1939,7 +1940,7 @@ JitsiConference.prototype._onMemberBotTypeChanged = function(jid, botType) {
     }
 };
 
-JitsiConference.prototype.onMemberLeft = function(jid) {
+JitsiConference.prototype.onMemberLeft = function(jid, reason) {
     const id = Strophe.getResourceFromJid(jid);
 
     if (id === 'focus' || this.myUserId() === id) {
@@ -1966,7 +1967,7 @@ JitsiConference.prototype.onMemberLeft = function(jid) {
 
     if (participant) {
         delete this.participants[id];
-        this.eventEmitter.emit(JitsiConferenceEvents.USER_LEFT, id, participant);
+        this.eventEmitter.emit(JitsiConferenceEvents.USER_LEFT, id, participant, reason);
     }
 
     if (this.room !== null) { // Skip if we have left the room already.
