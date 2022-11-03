@@ -360,6 +360,7 @@ Moderator.prototype._allocateConferenceFocusError = function(error, callback) {
         const errorCode = reservationErr.attr('error-code');
         const sessionIdError = reservationErr.attr('session-id');
         const errorTextNode = $(error).find('>error>text');
+        const roomType = reservationErr.attr('room-type');
         let errorMsg;
 
         if (errorTextNode) {
@@ -369,7 +370,8 @@ Moderator.prototype._allocateConferenceFocusError = function(error, callback) {
             XMPPEvents.RESERVATION_ERROR,
             errorCode,
             errorMsg,
-            sessionIdError);
+            sessionIdError,
+            roomType);
 
         return;
     }
