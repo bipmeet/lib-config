@@ -3,6 +3,7 @@ import { Strophe } from 'strophe.js';
 
 import * as JitsiConferenceErrors from './JitsiConferenceErrors';
 import * as JitsiConferenceEvents from './JitsiConferenceEvents';
+import * as JitsiTrackEvents from './JitsiTrackEvents';
 import { SPEAKERS_AUDIO_LEVELS } from './modules/statistics/constants';
 import Statistics from './modules/statistics/statistics';
 import EventEmitterForwarder from './modules/util/EventEmitterForwarder';
@@ -188,6 +189,10 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
             conference.eventEmitter.emit(JitsiConferenceEvents.CONFERENCE_FAILED,
                 JitsiConferenceErrors.OFFER_ANSWER_FAILED, e);
         }
+    });
+
+    chatRoom.addListener(JitsiTrackEvents.TRACK_REMOVED, track => {
+        conference.eventEmitter.emit(JitsiConferenceEvents.TRACK_REMOVED, track);
     });
 
     this.chatRoomForwarder.forward(XMPPEvents.ROOM_JOIN_ERROR,
@@ -524,6 +529,10 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
         JitsiConferenceEvents.BREAKOUT_ROOMS_MOVE_TO_ROOM);
     this.chatRoomForwarder.forward(XMPPEvents.BREAKOUT_ROOMS_UPDATED,
         JitsiConferenceEvents.BREAKOUT_ROOMS_UPDATED);
+
+    // Room metadata.
+    this.chatRoomForwarder.forward(XMPPEvents.ROOM_METADATA_UPDATED,
+        JitsiConferenceEvents.METADATA_UPDATED);
 };
 
 /**
@@ -542,29 +551,32 @@ JitsiConferenceEventManager.prototype.setupRTCListeners = function() {
         conference.onRemoteTrackRemoved.bind(conference));
 
     rtc.addListener(RTCEvents.DOMINANT_SPEAKER_CHANGED,
-        (dominant, previous) => {
-            if (conference.lastDominantSpeaker !== dominant && conference.room) {
+        (dominant, previous, silence) => {
+            if ((conference.lastDominantSpeaker !== dominant || conference.dominantSpeakerIsSilent !== silence)
+                    && conference.room) {
                 conference.lastDominantSpeaker = dominant;
+                conference.dominantSpeakerIsSilent = silence;
                 conference.eventEmitter.emit(
-                    JitsiConferenceEvents.DOMINANT_SPEAKER_CHANGED, dominant, previous);
-
-                if (previous && previous.length) {
-                    const speakerList = previous.slice(0);
-
-                    // Add the dominant speaker to the top of the list (exclude self).
-                    if (conference.myUserId !== dominant) {
-                        speakerList.splice(0, 0, dominant);
-                    }
-
-                    // Trim the list to the top 5 speakers only.
-                    if (speakerList.length > SPEAKERS_AUDIO_LEVELS) {
-                        speakerList.splice(SPEAKERS_AUDIO_LEVELS, speakerList.length - SPEAKERS_AUDIO_LEVELS);
-                    }
-                    conference.statistics && conference.statistics.setSpeakerList(speakerList);
-                }
+                    JitsiConferenceEvents.DOMINANT_SPEAKER_CHANGED, dominant, previous, silence);
                 if (conference.statistics && conference.myUserId() === dominant) {
                     // We are the new dominant speaker.
-                    conference.statistics.sendDominantSpeakerEvent(conference.room.roomjid);
+                    conference.statistics.sendDominantSpeakerEvent(conference.room.roomjid, silence);
+                }
+                if (conference.lastDominantSpeaker !== dominant) {
+                    if (previous && previous.length) {
+                        const speakerList = previous.slice(0);
+
+                        // Add the dominant speaker to the top of the list (exclude self).
+                        if (conference.myUserId !== dominant) {
+                            speakerList.splice(0, 0, dominant);
+                        }
+
+                        // Trim the list to the top 5 speakers only.
+                        if (speakerList.length > SPEAKERS_AUDIO_LEVELS) {
+                            speakerList.splice(SPEAKERS_AUDIO_LEVELS, speakerList.length - SPEAKERS_AUDIO_LEVELS);
+                        }
+                        conference.statistics && conference.statistics.setSpeakerList(speakerList);
+                    }
                 }
             }
         });
@@ -580,6 +592,18 @@ JitsiConferenceEventManager.prototype.setupRTCListeners = function() {
             createConnectionStageReachedEvent(key, { value: now }));
 
         conference.eventEmitter.emit(JitsiConferenceEvents.DATA_CHANNEL_OPENED);
+    });
+
+    rtc.addListener(RTCEvents.VIDEO_SSRCS_REMAPPED, msg => {
+        const sess = this.conference.getActiveMediaSession();
+
+        sess.videoSsrcsRemapped(msg);
+    });
+
+    rtc.addListener(RTCEvents.AUDIO_SSRCS_REMAPPED, msg => {
+        const sess = this.conference.getActiveMediaSession();
+
+        sess.audioSsrcsRemapped(msg);
     });
 
     rtc.addListener(RTCEvents.ENDPOINT_MESSAGE_RECEIVED,

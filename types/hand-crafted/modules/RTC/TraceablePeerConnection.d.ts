@@ -88,7 +88,6 @@ export default class TraceablePeerConnection {
   iceConnectionState: unknown; // TODO:
   localDescription: unknown; // TODO:
   remoteDescription: unknown; // TODO:
-  containsTrack: ( track: JitsiLocalTrack | JitsiRemoteTrack ) => boolean;
   addTrack: ( track: JitsiLocalTrack, isInitiator?: boolean ) => Promise<void>;
   addTrackUnmute: ( track: JitsiLocalTrack ) => Promise<boolean>;
   getConfiguredVideoCodec: () => CodecMimeType;
@@ -99,6 +98,7 @@ export default class TraceablePeerConnection {
   findSenderByKind: ( mediaType: MediaType ) => RTCRtpSender | undefined; // TODO: possible bug in the JSDocs
   findReceiverForTrack: ( track: MediaStreamTrack ) => RTCRtpReceiver | undefined;
   findSenderForTrack: ( track: MediaStreamTrack ) => RTCRtpSender | undefined;
+  processLocalSdpForTransceiverInfo: ( localTracks: Array<JitsiLocalTrack> ) => void;
   replaceTrack: ( oldTrack: JitsiLocalTrack | null, newTrack: JitsiLocalTrack | null ) => Promise<boolean>;
   removeTrackMute: ( localTrack: JitsiLocalTrack ) => Promise<boolean>;
   createDataChannel: ( label: unknown, opts: unknown ) => unknown; // TODO:

@@ -55,14 +55,11 @@ const USER_MEDIA_SLOW_PROMISE_TIMEOUT = 1000;
  * @returns {*} the attributes to attach to analytics events.
  */
 function getAnalyticsAttributesFromOptions(options) {
-    const attributes = {
-        'audio_requested':
-            options.devices.includes('audio'),
-        'video_requested':
-            options.devices.includes('video'),
-        'screen_sharing_requested':
-            options.devices.includes('desktop')
-    };
+    const attributes: any = {};
+
+    attributes['audio_requested'] = options.devices.includes('audio');
+    attributes['video_requested'] = options.devices.includes('video');
+    attributes['screen_sharing_requested'] = options.devices.includes('desktop');
 
     if (attributes.video_requested) {
         attributes.resolution = options.resolution;
@@ -71,37 +68,34 @@ function getAnalyticsAttributesFromOptions(options) {
     return attributes;
 }
 
-/**
- * Tries to deal with the following problem: {@code JitsiMeetJS} is not only
- * this module, it's also a global (i.e. attached to {@code window}) namespace
- * for all globals of the projects in the Jitsi Meet family. If lib-jitsi-meet
- * is loaded through an HTML {@code script} tag, {@code JitsiMeetJS} will
- * automatically be attached to {@code window} by webpack. Unfortunately,
- * webpack's source code does not check whether the global variable has already
- * been assigned and overwrites it. Which is OK for the module
- * {@code JitsiMeetJS} but is not OK for the namespace {@code JitsiMeetJS}
- * because it may already contain the values of other projects in the Jitsi Meet
- * family. The solution offered here works around webpack by merging all
- * existing values of the namespace {@code JitsiMeetJS} into the module
- * {@code JitsiMeetJS}.
- *
- * @param {Object} module - The module {@code JitsiMeetJS} (which will be
- * exported and may be attached to {@code window} by webpack later on).
- * @private
- * @returns {Object} - A {@code JitsiMeetJS} module which contains all existing
- * value of the namespace {@code JitsiMeetJS} (if any).
- */
-function _mergeNamespaceAndModule(module) {
-    return (
-        typeof window.JitsiMeetJS === 'object'
-            ? Object.assign({}, window.JitsiMeetJS, module)
-            : module);
+interface ICreateLocalTrackOptions {
+    cameraDeviceId?: string;
+    devices?: any[];
+    firePermissionPromptIsShownEvent?: boolean;
+    fireSlowPromiseEvent?: boolean;
+    micDeviceId?: string;
+    resolution?: string;
+}
+
+interface IJitsiMeetJSOptions {
+    enableAnalyticsLogging?: boolean;
+    enableUnifiedOnChrome?: boolean;
+    enableWindowOnErrorHandler?: boolean;
+    externalStorage?: Storage;
+    flags?: {
+        enableUnifiedOnChrome?: boolean;
+        receiveMultipleVideoStreams?: boolean;
+        runInLiteMode?: boolean;
+        sendMultipleVideoStreams?: boolean;
+        sourceNameSignaling?: boolean;
+        ssrcRewritingEnabled?: boolean;
+    }
 }
 
 /**
  * The public API of the Jitsi Meet library (a.k.a. {@code JitsiMeetJS}).
  */
-export default _mergeNamespaceAndModule({
+export default {
 
     version: '{#COMMIT_HASH#}',
 
@@ -141,20 +135,21 @@ export default _mergeNamespaceAndModule({
         JitsiTrackError
     },
     logLevels: Logger.levels,
-    mediaDevices: JitsiMediaDevices,
-    analytics: Statistics.analytics,
-    init(options = {}) {
+    mediaDevices: JitsiMediaDevices as unknown,
+    analytics: Statistics.analytics as unknown,
+    init(options: IJitsiMeetJSOptions = {}) {
         Settings.init(options.externalStorage);
         Statistics.init(options);
+        const flags = options.flags || {};
 
         // Multi-stream is supported only on endpoints running in Unified plan mode and the flag to disable unified
         // plan also needs to be taken into consideration.
-        if (typeof options.enableUnifiedOnChrome !== 'undefined' && options.flags) {
-            options.flags.enableUnifiedOnChrome = options.enableUnifiedOnChrome;
+        if (typeof options.enableUnifiedOnChrome !== 'undefined') {
+            flags.enableUnifiedOnChrome = options.enableUnifiedOnChrome;
         }
 
         // Configure the feature flags.
-        FeatureFlags.init(options.flags || { });
+        FeatureFlags.init(flags);
 
         // Initialize global window.connectionTimes
         // FIXME do not use 'window'
@@ -291,16 +286,15 @@ export default _mergeNamespaceAndModule({
      * that returns an array of created JitsiTracks if resolved, or a
      * JitsiConferenceError if rejected.
      */
-    createLocalTracks(options = {}, oldfirePermissionPromptIsShownEvent) {
+    createLocalTracks(options: ICreateLocalTrackOptions = {}, oldfirePermissionPromptIsShownEvent) {
         let promiseFulfilled = false;
 
         const { firePermissionPromptIsShownEvent, fireSlowPromiseEvent, ...restOptions } = options;
         const firePermissionPrompt = firePermissionPromptIsShownEvent || oldfirePermissionPromptIsShownEvent;
 
         if (firePermissionPrompt && !RTC.arePermissionsGrantedForAvailableDevices()) {
-            JitsiMediaDevices.emitEvent(
-                JitsiMediaDevicesEvents.PERMISSION_PROMPT_IS_SHOWN,
-                browser.getName());
+            // @ts-ignore
+            JitsiMediaDevices.emitEvent(JitsiMediaDevicesEvents.PERMISSION_PROMPT_IS_SHOWN, browser.getName());
         } else if (fireSlowPromiseEvent) {
             window.setTimeout(() => {
                 if (!promiseFulfilled) {
@@ -541,7 +535,8 @@ export default _mergeNamespaceAndModule({
     /**
      * Informs lib-jitsi-meet about the current network status.
      *
-     * @param {boolean} isOnline - {@code true} if the internet connectivity is online or {@code false}
+     * @param {object} state - The network info state.
+     * @param {boolean} state.isOnline - {@code true} if the internet connectivity is online or {@code false}
      * otherwise.
      */
     setNetworkInfo({ isOnline }) {
@@ -579,4 +574,4 @@ export default _mergeNamespaceAndModule({
         ScriptUtil,
         browser
     }
-});
+};

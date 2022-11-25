@@ -267,6 +267,18 @@ export default class JitsiRemoteTrack extends JitsiTrack {
     }
 
     /**
+     * Update the properties when the track is remapped to another source.
+     *
+     * @param {string} owner The endpoint ID of the new owner.
+     * @param {string} name The new source name.
+     */
+    setNewSource(owner, name) {
+        this.ownerEndpointId = owner;
+        this._sourceName = name;
+        this.emit(JitsiTrackEvents.TRACK_OWNER_CHANGED, owner);
+    }
+
+    /**
      * Changes the video type of the track.
      *
      * @param {string} type - The new video type("camera", "desktop").
@@ -409,6 +421,17 @@ export default class JitsiRemoteTrack extends JitsiTrack {
             });
 
         this._trackStreamingStatusImpl.init();
+
+        // In some edge cases, both browser 'unmute' and bridge's forwarded sources events are received before a
+        // LargeVideoUpdate is scheduled for auto-pinning a new screenshare track. If there are no layout changes and
+        // no further track events are received for the SS track, a black tile will be displayed for screenshare on
+        // stage. Fire a TRACK_STREAMING_STATUS_CHANGED event if the media is already being received for the remote
+        // track to prevent this from happening.
+        !this._trackStreamingStatusImpl.isVideoTrackFrozen()
+            && this.rtc.eventEmitter.emit(
+                JitsiTrackEvents.TRACK_STREAMING_STATUS_CHANGED,
+                this,
+                this._trackStreamingStatus);
     }
 
     /**
@@ -474,6 +497,6 @@ export default class JitsiRemoteTrack extends JitsiTrack {
      */
     toString() {
         return `RemoteTrack[userID: ${this.getParticipantId()}, type: ${this.getType()}, ssrc: ${
-            this.getSSRC()}, p2p: ${this.isP2P}, sourceName: ${this._sourceName}, status: ${this._getStatus()}]`;
+            this.getSSRC()}, p2p: ${this.isP2P}, sourceName: ${this._sourceName}, status: {${this._getStatus()}}]`;
     }
 }

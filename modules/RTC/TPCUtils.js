@@ -3,6 +3,7 @@ import transform from 'sdp-transform';
 
 import { MediaDirection } from '../../service/RTC/MediaDirection';
 import { MediaType } from '../../service/RTC/MediaType';
+import { getSourceIndexFromSourceName } from '../../service/RTC/SignalingLayer';
 import { VideoType } from '../../service/RTC/VideoType';
 import browser from '../browser';
 import FeatureFlags from '../flags/FeatureFlags';
@@ -376,7 +377,10 @@ export class TPCUtils {
             transceiver = this.pc.peerconnection.getTransceivers().find(
                 t => t.receiver.track.kind === mediaType
                 && t.direction === MediaDirection.RECVONLY
-                && t.currentDirection === MediaDirection.INACTIVE);
+
+                // Re-use any existing recvonly transceiver (if available) for p2p case.
+                && ((this.pc.isP2P && t.currentDirection === MediaDirection.RECVONLY)
+                    || (t.currentDirection === MediaDirection.INACTIVE && !t.stopped)));
 
         // For mute/unmute operations, find the transceiver based on the track index in the source name if present,
         // otherwise it is assumed to be the first local track that was added to the peerconnection.
@@ -385,18 +389,25 @@ export class TPCUtils {
             const sourceName = newTrack?.getSourceName() ?? oldTrack?.getSourceName();
 
             if (sourceName) {
-                const trackIndex = Number(sourceName.split('-')[1].substring(1));
+                const trackIndex = getSourceIndexFromSourceName(sourceName);
 
-                if (trackIndex) {
+                if (this.pc.isP2P) {
                     transceiver = this.pc.peerconnection.getTransceivers()
-                        .filter(t => t.receiver.track.kind === mediaType
-                            && t.direction !== MediaDirection.RECVONLY)[trackIndex];
+                        .filter(t => t.receiver.track.kind === mediaType)[trackIndex];
+                } else if (oldTrack) {
+                    const transceiverMid = this.pc._localTrackTransceiverMids.get(oldTrack.rtcId);
+
+                    transceiver = this.pc.peerconnection.getTransceivers().find(t => t.mid === transceiverMid);
+                } else if (trackIndex) {
+                    transceiver = this.pc.peerconnection.getTransceivers()
+                            .filter(t => t.receiver.track.kind === mediaType
+                                && t.direction !== MediaDirection.RECVONLY)[trackIndex];
                 }
             }
         }
-
         if (!transceiver) {
-            return Promise.reject(new Error('replace track failed'));
+            return Promise.reject(
+                new Error(`Replace track failed - no transceiver for old: ${oldTrack}, new: ${newTrack}`));
         }
         logger.debug(`${this.pc} Replacing ${oldTrack} with ${newTrack}`);
 
@@ -450,14 +461,13 @@ export class TPCUtils {
     setMediaTransferActive(mediaType, active) {
         const transceivers = this.pc.peerconnection.getTransceivers()
             .filter(t => t.receiver && t.receiver.track && t.receiver.track.kind === mediaType);
-        const localTracks = this.pc.getLocalTracks(mediaType);
 
         logger.info(`${this.pc} ${active ? 'Enabling' : 'Suspending'} ${mediaType} media transfer.`);
-        transceivers.forEach((transceiver, idx) => {
+        transceivers.forEach(transceiver => {
             if (active) {
-                // The first transceiver is for the local track and only this one can be set to 'sendrecv'.
-                // When multi-stream is enabled, there can be multiple transceivers with outbound streams.
-                if (idx < localTracks.length) {
+                const localTrackMids = Array.from(this.pc._localTrackTransceiverMids);
+
+                if (localTrackMids.find(mids => mids[1] === transceiver.mid)) {
                     transceiver.direction = MediaDirection.SENDRECV;
                 } else {
                     transceiver.direction = MediaDirection.RECVONLY;

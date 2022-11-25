@@ -333,10 +333,10 @@ export default class BridgeChannel {
 
             switch (colibriClass) {
             case 'DominantSpeakerEndpointChangeEvent': {
-                const { dominantSpeakerEndpoint, previousSpeakers = [] } = obj;
+                const { dominantSpeakerEndpoint, previousSpeakers = [], silence } = obj;
 
                 logger.debug(`Dominant speaker: ${dominantSpeakerEndpoint}, previous speakers: ${previousSpeakers}`);
-                emitter.emit(RTCEvents.DOMINANT_SPEAKER_CHANGED, dominantSpeakerEndpoint, previousSpeakers);
+                emitter.emit(RTCEvents.DOMINANT_SPEAKER_CHANGED, dominantSpeakerEndpoint, previousSpeakers, silence);
                 break;
             }
             case 'EndpointConnectivityStatusChangeEvent': {
@@ -411,6 +411,16 @@ export default class BridgeChannel {
             }
             case 'ServerHello': {
                 logger.info(`Received ServerHello, version=${obj.version}.`);
+                break;
+            }
+            case 'VideoSourcesMap': {
+                logger.info(`Received VideoSourcesMap: ${JSON.stringify(obj.mappedSources)}`);
+                emitter.emit(RTCEvents.VIDEO_SSRCS_REMAPPED, obj);
+                break;
+            }
+            case 'AudioSourcesMap': {
+                logger.info(`Received AudioSourcesMap: ${JSON.stringify(obj.mappedSources)}`);
+                emitter.emit(RTCEvents.AUDIO_SSRCS_REMAPPED, obj);
                 break;
             }
             default: {

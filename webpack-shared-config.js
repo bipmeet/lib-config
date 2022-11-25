@@ -13,6 +13,9 @@ module.exports = (minimize, analyzeBundle) => {
         // devtool: minimize ? 'source-map' : 'inline-source-map',
         mode: minimize ? 'production' : 'development',
         resolve: {
+            alias: {
+                'jquery': require.resolve('jquery/dist/jquery.slim.min.js')
+            },
             extensions: [ '', '.js', '.ts' ]
         },
         module: {
@@ -75,8 +78,8 @@ module.exports = (minimize, analyzeBundle) => {
         },
         performance: {
             hints: minimize ? 'error' : false,
-            maxAssetSize: 750 * 1024,
-            maxEntrypointSize: 750 * 1024
+            maxAssetSize: 825 * 1024,
+            maxEntrypointSize: 825 * 1024
         },
         plugins: [
             analyzeBundle

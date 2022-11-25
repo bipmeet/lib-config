@@ -3,7 +3,6 @@ import { getLogger } from '@jitsi/logger';
 import { MediaType } from '../../service/RTC/MediaType';
 import * as StatisticsEvents from '../../service/statistics/Events';
 import browser from '../browser';
-import FeatureFlags from '../flags/FeatureFlags';
 
 const GlobalOnErrorHandler = require('../util/GlobalOnErrorHandler');
 
@@ -279,10 +278,8 @@ StatsCollector.prototype._processAndEmitReport = function() {
     const codecs = {};
     let audioBitrateDownload = 0;
     let audioBitrateUpload = 0;
-    let audioCodec;
     let videoBitrateDownload = 0;
     let videoBitrateUpload = 0;
-    let videoCodec;
 
     for (const [ ssrc, ssrcStats ] of this.ssrc2stats) {
         // process packet loss stats
@@ -300,6 +297,9 @@ StatsCollector.prototype._processAndEmitReport = function() {
         const track = this.peerconnection.getTrackBySSRC(ssrc);
 
         if (track) {
+            let audioCodec;
+            let videoCodec;
+
             if (track.isAudioTrack()) {
                 audioBitrateDownload += ssrcStats.bitrate.download;
                 audioBitrateUpload += ssrcStats.bitrate.upload;
@@ -310,67 +310,38 @@ StatsCollector.prototype._processAndEmitReport = function() {
                 videoCodec = ssrcStats.codec;
             }
 
-            if (FeatureFlags.isSourceNameSignalingEnabled()) {
-                const sourceName = track.getSourceName();
+            const participantId = track.getParticipantId();
 
-                if (sourceName) {
-                    const resolution = ssrcStats.resolution;
+            if (participantId) {
+                const resolution = ssrcStats.resolution;
 
-                    if (resolution.width // eslint-disable-line max-depth
-                            && resolution.height
-                            && resolution.width !== -1
-                            && resolution.height !== -1) {
-                        resolutions[sourceName] = resolution;
-                    }
-                    if (ssrcStats.framerate !== 0) { // eslint-disable-line max-depth
-                        framerates[sourceName] = ssrcStats.framerate;
-                    }
-                    if (audioCodec && videoCodec) { // eslint-disable-line max-depth
-                        const codecDesc = {
-                            'audio': audioCodec,
-                            'video': videoCodec
-                        };
+                if (resolution.width
+                        && resolution.height
+                        && resolution.width !== -1
+                        && resolution.height !== -1) {
+                    const userResolutions = resolutions[participantId] || {};
 
-                        codecs[sourceName] = codecDesc;
-                    }
-                } else {
-                    logger.error(`No source name returned by ${track}`);
+                    userResolutions[ssrc] = resolution;
+                    resolutions[participantId] = userResolutions;
                 }
+
+                if (ssrcStats.framerate > 0) {
+                    const userFramerates = framerates[participantId] || {};
+
+                    userFramerates[ssrc] = ssrcStats.framerate;
+                    framerates[participantId] = userFramerates;
+                }
+
+                const userCodecs = codecs[participantId] ?? { };
+
+                userCodecs[ssrc] = {
+                    audio: audioCodec,
+                    video: videoCodec
+                };
+
+                codecs[participantId] = userCodecs;
             } else {
-                const participantId = track.getParticipantId();
-
-                if (participantId) {
-                    const resolution = ssrcStats.resolution;
-
-                    if (resolution.width // eslint-disable-line max-depth
-                            && resolution.height
-                            && resolution.width !== -1
-                            && resolution.height !== -1) {
-                        const userResolutions = resolutions[participantId] || {};
-
-                        userResolutions[ssrc] = resolution;
-                        resolutions[participantId] = userResolutions;
-                    }
-                    if (ssrcStats.framerate !== 0) { // eslint-disable-line max-depth
-                        const userFramerates = framerates[participantId] || {};
-
-                        userFramerates[ssrc] = ssrcStats.framerate;
-                        framerates[participantId] = userFramerates;
-                    }
-                    if (audioCodec && videoCodec) { // eslint-disable-line max-depth
-                        const codecDesc = {
-                            'audio': audioCodec,
-                            'video': videoCodec
-                        };
-
-                        const userCodecs = codecs[participantId] || {};
-
-                        userCodecs[ssrc] = codecDesc;
-                        codecs[participantId] = userCodecs;
-                    }
-                } else {
-                    logger.error(`No participant ID returned by ${track}`);
-                }
+                logger.error(`No participant ID returned by ${track}`);
             }
         }
 
@@ -494,12 +465,11 @@ StatsCollector.prototype._calculateBitrate = function(now, before, fieldName) {
  * Stats processing for spec-compliant RTCPeerConnection#getStats.
  */
 StatsCollector.prototype.processStatsReport = function() {
-    if (!this.previousStatsReport) {
-        return;
-    }
     const byteSentStats = {};
 
     this.currentStatsReport.forEach(now => {
+        const before = this.previousStatsReport ? this.previousStatsReport.get(now.id) : null;
+
         // RTCIceCandidatePairStats - https://w3c.github.io/webrtc-stats/#candidatepair-dict*
         if (now.type === 'candidate-pair' && now.nominated && now.state === 'succeeded') {
             const availableIncomingBitrate = now.availableIncomingBitrate;
@@ -556,10 +526,9 @@ StatsCollector.prototype.processStatsReport = function() {
         // RTCSentRtpStreamStats
         // https://w3c.github.io/webrtc-stats/#sentrtpstats-dict*
         } else if (now.type === 'inbound-rtp' || now.type === 'outbound-rtp') {
-            const before = this.previousStatsReport.get(now.id);
             const ssrc = this.getNonNegativeValue(now.ssrc);
 
-            if (!before || !ssrc) {
+            if (!ssrc) {
                 return;
             }
 
@@ -584,18 +553,20 @@ StatsCollector.prototype.processStatsReport = function() {
                 packetsNow = 0;
             }
 
-            const packetsBefore = this.getNonNegativeValue(before[key]);
-            const packetsDiff = Math.max(0, packetsNow - packetsBefore);
+            if (before) {
+                const packetsBefore = this.getNonNegativeValue(before[key]);
+                const packetsDiff = Math.max(0, packetsNow - packetsBefore);
 
-            const packetsLostNow = this.getNonNegativeValue(now.packetsLost);
-            const packetsLostBefore = this.getNonNegativeValue(before.packetsLost);
-            const packetsLostDiff = Math.max(0, packetsLostNow - packetsLostBefore);
+                const packetsLostNow = this.getNonNegativeValue(now.packetsLost);
+                const packetsLostBefore = this.getNonNegativeValue(before.packetsLost);
+                const packetsLostDiff = Math.max(0, packetsLostNow - packetsLostBefore);
 
-            ssrcStats.setLoss({
-                packetsTotal: packetsDiff + packetsLostDiff,
-                packetsLost: packetsLostDiff,
-                isDownloadStream
-            });
+                ssrcStats.setLoss({
+                    packetsTotal: packetsDiff + packetsLostDiff,
+                    packetsLost: packetsLostDiff,
+                    isDownloadStream
+                });
+            }
 
             // Get the resolution and framerate for only remote video sources here. For the local video sources,
             // 'track' stats will be used since they have the updated resolution based on the simulcast streams
@@ -614,11 +585,13 @@ StatsCollector.prototype.processStatsReport = function() {
                 }
                 ssrcStats.setFramerate(Math.round(frameRate || 0));
 
-                ssrcStats.addBitrate({
-                    'download': this._calculateBitrate(now, before, 'bytesReceived'),
-                    'upload': 0
-                });
-            } else {
+                if (before) {
+                    ssrcStats.addBitrate({
+                        'download': this._calculateBitrate(now, before, 'bytesReceived'),
+                        'upload': 0
+                    });
+                }
+            } else if (before) {
                 byteSentStats[ssrc] = this.getNonNegativeValue(now.bytesSent);
                 ssrcStats.addBitrate({
                     'download': 0,
@@ -673,8 +646,6 @@ StatsCollector.prototype.processStatsReport = function() {
             let frameRate = now.framesPerSecond;
 
             if (!frameRate) {
-                const before = this.previousStatsReport.get(now.id);
-
                 if (before) {
                     const timeMs = now.timestamp - before.timestamp;
 
@@ -699,7 +670,10 @@ StatsCollector.prototype.processStatsReport = function() {
         }
     });
 
-    this.eventEmitter.emit(StatisticsEvents.BYTE_SENT_STATS, this.peerconnection, byteSentStats);
+    if (Object.keys(byteSentStats).length) {
+        this.eventEmitter.emit(StatisticsEvents.BYTE_SENT_STATS, this.peerconnection, byteSentStats);
+    }
+
     this._processAndEmitReport();
 };
 
@@ -740,4 +714,3 @@ StatsCollector.prototype.processAudioLevelReport = function() {
         }
     });
 };
-

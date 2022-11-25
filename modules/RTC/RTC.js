@@ -212,10 +212,10 @@ export default class RTC extends Listenable {
     /**
      * Creates the local MediaStreams.
      * @param {object} [options] Optional parameters.
-     * @param {array} options.devices The devices that will be requested.
-     * @param {string} options.resolution Resolution constraints.
-     * @param {string} options.cameraDeviceId
-     * @param {string} options.micDeviceId
+     * @param {Array=} options.devices The devices that will be requested.
+     * @param {string=} options.resolution Resolution constraints.
+     * @param {string=} options.cameraDeviceId
+     * @param {string=} options.micDeviceId
      * @returns {*} Promise object that will receive the new JitsiTracks
      */
     static obtainAudioAndVideoPermissions(options) {
@@ -335,6 +335,7 @@ export default class RTC extends Listenable {
         const oldForwardedSources = this._forwardedSources || [];
         let leavingForwardedSources = [];
         let enteringForwardedSources = [];
+        const timestamp = Date.now();
 
         this._forwardedSources = forwardedSources;
 
@@ -343,11 +344,13 @@ export default class RTC extends Listenable {
         enteringForwardedSources = forwardedSources.filter(
             sourceName => oldForwardedSources.indexOf(sourceName) === -1);
 
+        logger.debug(`Fowarded sources changed leaving=${leavingForwardedSources}, entering=`
+            + `${enteringForwardedSources} at ${timestamp}`);
         this.conference.eventEmitter.emit(
             JitsiConferenceEvents.FORWARDED_SOURCES_CHANGED,
             leavingForwardedSources,
             enteringForwardedSources,
-            Date.now());
+            timestamp);
     }
 
     /**

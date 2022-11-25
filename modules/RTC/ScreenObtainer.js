@@ -124,14 +124,16 @@ const ScreenObtainer = {
      *
      * @param onSuccess - Success callback.
      * @param onFailure - Failure callback.
+     * @param {Object} options - Optional parameters.
      */
-    obtainScreenOnElectron(onSuccess, onFailure) {
+    obtainScreenOnElectron(onSuccess, onFailure, options = {}) {
         if (window.JitsiMeetScreenObtainer && window.JitsiMeetScreenObtainer.openDesktopPicker) {
             const { desktopSharingFrameRate, desktopSharingSources } = this.options;
 
             window.JitsiMeetScreenObtainer.openDesktopPicker(
                 {
-                    desktopSharingSources: desktopSharingSources || [ 'screen', 'window' ]
+                    desktopSharingSources:
+                        options.desktopSharingSources || desktopSharingSources || [ 'screen', 'window' ]
                 },
                 (streamId, streamType, screenShareAudio = false) => {
                     if (streamId) {
@@ -210,6 +212,11 @@ const ScreenObtainer = {
         const setScreenSharingResolutionConstraints = browser.isChromiumBased()
             && this.options?.testing?.setScreenSharingResolutionConstraints;
         let video = {};
+
+        // Allow users to seamlessly switch which tab they are sharing without having to select the tab again.
+        if (browser.isChromiumBased() && browser.isVersionGreaterThan(106)) {
+            video.surfaceSwitching = 'include';
+        }
 
         if (typeof desktopSharingFrameRate === 'object') {
             video.frameRate = desktopSharingFrameRate;

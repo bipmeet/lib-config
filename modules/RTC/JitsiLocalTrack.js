@@ -67,7 +67,7 @@ export default class JitsiLocalTrack extends JitsiTrack {
             /* conference */ null,
             stream,
             track,
-            /* streamInactiveHandler */ () => this.emit(LOCAL_TRACK_STOPPED),
+            /* streamInactiveHandler */ () => this.emit(LOCAL_TRACK_STOPPED, this),
             mediaType,
             videoType);
 
@@ -98,7 +98,7 @@ export default class JitsiLocalTrack extends JitsiTrack {
          */
         this.rtcId = rtcId;
         this.sourceId = sourceId;
-        this.sourceType = sourceType;
+        this.sourceType = sourceType ?? displaySurface;
 
         // Get the resolution from the track itself because it cannot be
         // certain which resolution webrtc has fallen back to using.
@@ -592,19 +592,16 @@ export default class JitsiLocalTrack extends JitsiTrack {
      * @extends JitsiTrack#dispose
      * @returns {Promise}
      */
-    dispose() {
-        let promise = Promise.resolve();
+    async dispose() {
 
         // Remove the effect instead of stopping it so that the original stream is restored
         // on both the local track and on the peerconnection.
         if (this._streamEffect) {
-            promise = this.setEffect();
+            await this.setEffect();
         }
 
-        let removeTrackPromise = Promise.resolve();
-
         if (this.conference) {
-            removeTrackPromise = this.conference.removeTrack(this);
+            await this.conference.removeTrack(this);
         }
 
         if (this.stream) {
@@ -619,7 +616,7 @@ export default class JitsiLocalTrack extends JitsiTrack {
                 this._onAudioOutputDeviceChanged);
         }
 
-        return Promise.allSettled([ promise, removeTrackPromise ]).then(() => super.dispose());
+        return super.dispose();
     }
 
     /**
