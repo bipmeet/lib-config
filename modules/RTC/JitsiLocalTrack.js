@@ -355,11 +355,16 @@ export default class JitsiLocalTrack extends JitsiTrack {
      * @returns {Promise}
      */
     _setMuted(muted) {
+        logger.info('setMuted isMuted: ', this.isMuted(), ' muted: ', muted, ' videoType : ', this.videoType);
+
         if (this.isMuted() === muted
             && !(this.videoType === VideoType.DESKTOP && FeatureFlags.isMultiStreamSupportEnabled())) {
+            logger.info('First promise resolve');
+
             return Promise.resolve();
         }
 
+        logger.info('setMuted disposed : ', this.disposed);
         if (this.disposed) {
             return Promise.reject(new JitsiTrackError(TRACK_IS_DISPOSED));
         }
@@ -373,11 +378,13 @@ export default class JitsiLocalTrack extends JitsiTrack {
         // conference. This is needed because we don't want the client to signal a source-remove to the remote peer for
         // the desktop track when screenshare is stopped. Later when screenshare is started again, the same sender will
         // be re-used without the need for signaling a new ssrc through source-add.
+        logger.info('setMuted browser.doesVideoMuteByStreamRemove : ', browser.doesVideoMuteByStreamRemove());
+
         if (this.isAudioTrack()
                 || (this.videoType === VideoType.DESKTOP && !FeatureFlags.isMultiStreamSupportEnabled())
                 || !browser.doesVideoMuteByStreamRemove()) {
             logMuteInfo();
-
+            logger.info('logMuteInfo first call');
             // If we have a stream effect that implements its own mute functionality, prioritize it before
             // normal mute e.g. the stream effect that implements system audio sharing has a custom
             // mute state in which if the user mutes, system audio still has to go through.
@@ -387,26 +394,32 @@ export default class JitsiLocalTrack extends JitsiTrack {
                 this.track.enabled = !muted;
             }
         } else if (muted) {
+            logger.info('logMuteInfo second call');
             promise = new Promise((resolve, reject) => {
                 logMuteInfo();
                 this._removeStreamFromConferenceAsMute(
                     () => {
                         if (this._streamEffect) {
+                            logger.info('setMuted stopStreamEffect');
                             this._stopStreamEffect();
                         }
 
                         // FIXME: Maybe here we should set the SRC for the
                         // containers to something
                         // We don't want any events to be fired on this stream
+                        logger.info('setMuted unregisterHandlers');
                         this._unregisterHandlers();
+                        logger.info('setMuted stopStream');
                         this.stopStream();
+                        logger.info('setMuted setStream');
                         this._setStream(null);
-
+                        logger.info('removeStreamFromConferenceAsMute resolve');
                         resolve();
                     },
                     reject);
             });
         } else {
+            logger.info('logMuteInfo third call');
             logMuteInfo();
 
             // This path is only for camera.
@@ -456,11 +469,14 @@ export default class JitsiLocalTrack extends JitsiTrack {
 
         return promise
             .then(() => {
+                logger.info('promise then');
                 this._sendMuteStatus(muted);
 
                 // Send the videoType message to the bridge.
                 this.isVideoTrack() && this.conference && this.conference._sendBridgeVideoTypeMessage(this);
                 this.emit(TRACK_MUTE_CHANGED, this);
+            }).catch(e => {
+                console.log('promise catch : ', e);
             });
     }
 
