@@ -358,9 +358,7 @@ export default class JitsiLocalTrack extends JitsiTrack {
         logger.info('setMuted isMuted: ', this.isMuted(), ' muted: ', muted, ' videoType : ', this.videoType);
 
         if (this.isMuted() === muted
-            && !(this.videoType === VideoType.DESKTOP && FeatureFlags.isMultiStreamSupportEnabled())) {
-            logger.info('First promise resolve');
-
+            && !(this.videoType === VideoType.DESKTOP && FeatureFlags.isMultiStreamSendSupportEnabled())) {
             return Promise.resolve();
         }
 
@@ -374,6 +372,11 @@ export default class JitsiLocalTrack extends JitsiTrack {
         // A function that will print info about muted status transition
         const logMuteInfo = () => logger.info(`Mute ${this}: ${muted}`);
 
+        // In React Native we mute the camera by setting track.enabled but that doesn't
+        // work for screen-share tracks, so do the remove-as-mute for those.
+        const doesVideoMuteByStreamRemove
+            = browser.isReactNative() ? this.videoType === VideoType.DESKTOP : browser.doesVideoMuteByStreamRemove();
+
         // In the multi-stream mode, desktop tracks are muted from jitsi-meet instead of being removed from the
         // conference. This is needed because we don't want the client to signal a source-remove to the remote peer for
         // the desktop track when screenshare is stopped. Later when screenshare is started again, the same sender will
@@ -381,8 +384,8 @@ export default class JitsiLocalTrack extends JitsiTrack {
         logger.info('setMuted browser.doesVideoMuteByStreamRemove : ', browser.doesVideoMuteByStreamRemove());
 
         if (this.isAudioTrack()
-                || (this.videoType === VideoType.DESKTOP && !FeatureFlags.isMultiStreamSupportEnabled())
-                || !browser.doesVideoMuteByStreamRemove()) {
+                || (this.videoType === VideoType.DESKTOP && !FeatureFlags.isMultiStreamSendSupportEnabled())
+                || !doesVideoMuteByStreamRemove) {
             logMuteInfo();
             logger.info('logMuteInfo first call');
             // If we have a stream effect that implements its own mute functionality, prioritize it before
@@ -437,9 +440,7 @@ export default class JitsiLocalTrack extends JitsiTrack {
                     { constraints: { video: this._constraints } }));
 
             promise = promise.then(streamsInfo => {
-                // The track kind for presenter track is video as well.
-                const mediaType = this.getType() === MediaType.PRESENTER ? MediaType.VIDEO : this.getType();
-                const streamInfo = streamsInfo.find(info => info.track.kind === mediaType);
+                const streamInfo = streamsInfo.find(info => info.track.kind === this.getType());
 
                 if (streamInfo) {
                     this._setStream(streamInfo.stream);
