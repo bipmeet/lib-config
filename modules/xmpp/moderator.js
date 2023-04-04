@@ -222,6 +222,13 @@ Moderator.prototype._createConferenceIq = function() {
 
 Moderator.prototype._parseConferenceIq = function(resultIq) {
     const conferenceRequest = { properties: {} };
+    
+    const authenticationEnabled
+        = $(resultIq).find(
+            '>conference>property'
+            + '[name=\'authentication\'][value=\'true\']').length > 0;
+
+    logger.info(`Authentication enabled: ${authenticationEnabled}`);
 
     conferenceRequest.focusJid = $(resultIq).find('conference').attr('focusjid');
     conferenceRequest.sessionId = $(resultIq).find('conference').attr('session-id');
