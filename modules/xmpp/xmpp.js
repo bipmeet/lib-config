@@ -265,6 +265,14 @@ export default class XMPP extends Listenable {
         if (FeatureFlags.isSsrcRewritingSupported()) {
             this.caps.addFeature('http://jitsi.org/ssrc-rewriting-1');
         }
+
+        // Use "-1" as a version that we can bump later. This should match
+        // the version added in moderator.js, this one here is mostly defined
+        // for keeping stats, since it is not made available to jocofo at
+        // the time of the initial conference-request.
+        if (FeatureFlags.isJoinAsVisitorSupported()) {
+            this.caps.addFeature('http://jitsi.org/visitors-1');
+        }
     }
 
     /**
@@ -787,8 +795,8 @@ export default class XMPP extends Listenable {
         this.disconnectInProgress = new Promise(resolve => {
             const disconnectListener = (credentials, status) => {
                 if (status === Strophe.Status.DISCONNECTED) {
-                    resolve();
                     this.eventEmitter.removeListener(XMPPEvents.CONNECTION_STATUS_CHANGED, disconnectListener);
+                    resolve();
                 }
             };
 

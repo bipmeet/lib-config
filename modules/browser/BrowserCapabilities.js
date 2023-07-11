@@ -23,8 +23,7 @@ export default class BrowserCapabilities extends BrowserDetection {
      */
     constructor() {
         super();
-        logger.info(
-            `This appears to be ${this.getName()}, ver: ${this.getVersion()}`);
+        logger.info(`This appears to be ${this.getName()}, ver: ${this.getVersion()}`);
     }
 
     /**
@@ -200,11 +199,7 @@ export default class BrowserCapabilities extends BrowserDetection {
      */
     supportsReceiverStats() {
         return typeof window.RTCRtpReceiver !== 'undefined'
-            && Object.keys(RTCRtpReceiver.prototype).indexOf('getSynchronizationSources') > -1
-
-            // Disable this on Safari because it is reporting 0.000001 as the audio levels for all
-            // remote audio tracks.
-            && !this.isWebKitBased();
+            && Object.keys(RTCRtpReceiver.prototype).indexOf('getSynchronizationSources') > -1;
     }
 
     /**
@@ -222,6 +217,15 @@ export default class BrowserCapabilities extends BrowserDetection {
         // https://bugzilla.mozilla.org/show_bug.cgi?id=1241066
         // For Chrome and others we rely on 'googRtt'.
         return !this.isFirefox();
+    }
+
+    /**
+     * Returns true if the browser supports track based statistics for the local video track. Otherwise,
+     * track resolution and framerate will be calculated based on the 'outbound-rtp' statistics.
+     * @returns {boolean}
+     */
+    supportsTrackBasedStats() {
+        return this.isChromiumBased() && this.isVersionLessThan(112);
     }
 
     /**

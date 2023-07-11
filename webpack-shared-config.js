@@ -2,8 +2,7 @@
 
 const path = require('path');
 const process = require('process');
-const TerserPlugin = require('terser-webpack-plugin');
-const { ProvidePlugin } = require('webpack');
+const { IgnorePlugin, ProvidePlugin } = require('webpack');
 const { BundleAnalyzerPlugin } = require('webpack-bundle-analyzer');
 
 
@@ -82,6 +81,7 @@ module.exports = (minimize, analyzeBundle) => {
             maxEntrypointSize: 825 * 1024
         },
         plugins: [
+            new IgnorePlugin({ resourceRegExp: /^(@xmldom\/xmldom|ws)$/ }),
             analyzeBundle
                 && new BundleAnalyzerPlugin({
                     analyzerMode: 'disabled',

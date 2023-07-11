@@ -3,6 +3,7 @@ import { getLogger } from '@jitsi/logger';
 import $ from 'jquery';
 import { $iq, Strophe } from 'strophe.js';
 
+import FeatureFlags from '../flags/FeatureFlags';
 import Settings from '../settings/Settings';
 
 const AuthenticationEvents
@@ -216,6 +217,11 @@ Moderator.prototype._createConferenceIq = function() {
                 }).up();
         }
     }
+    if (FeatureFlags.isJoinAsVisitorSupported()) {
+        elem.c('property', {
+            name: 'visitors-version',
+            value: 1 }).up();
+    }
 
     return elem;
 };
@@ -362,7 +368,8 @@ Moderator.prototype._handleSuccess = function(conferenceRequest, callback) {
         // Reset the non-error timeout (because we've succeeded here).
         this.getNextTimeout(true);
 
-        if (conferenceRequest.vnode) {
+        // we want to ignore redirects when this is jibri (record/live-stream or a sip jibri)
+        if (conferenceRequest.vnode && !this.options.iAmRecorder && !this.options.iAmSipGateway) {
             logger.warn(`Redirected to: ${conferenceRequest.vnode} with focusJid ${conferenceRequest.focusJid} }`);
 
             this.eventEmitter.emit(XMPPEvents.REDIRECTED, conferenceRequest.vnode, conferenceRequest.focusJid);
