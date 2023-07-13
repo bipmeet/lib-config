@@ -67,9 +67,7 @@ module.exports = (minimize, analyzeBundle) => {
             __filename: true
         },
         optimization: {
-            minimizer: [ new TerserPlugin() ],
             concatenateModules: minimize,
-            minimize: true
         },
         output: {
             filename: `[name]${minimize ? '.min' : ''}.js`,
