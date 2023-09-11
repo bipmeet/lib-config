@@ -1,3 +1,4 @@
+import { safeJsonParse } from '@jitsi/js-utils/json';
 import { getLogger } from '@jitsi/logger';
 import $ from 'jquery';
 import isEqual from 'lodash.isequal';
@@ -462,7 +463,7 @@ export default class ChatRoom extends Listenable {
 
             if (roomMetadataText) {
                 try {
-                    this.roomMetadata._handleMessages(JSON.parse(roomMetadataText));
+                    this.roomMetadata._handleMessages(safeJsonParse(roomMetadataText));
                 } catch (e) {
                     logger.warn('Failed to set room metadata', e);
                 }
@@ -1276,6 +1277,8 @@ export default class ChatRoom extends Listenable {
      * @param from
      */
     onPresenceError(pres, from) {
+        let errorDescriptionNode;
+
         if ($(pres)
                 .find(
                     '>error[type="auth"]'
@@ -1320,17 +1323,15 @@ export default class ChatRoom extends Listenable {
 
             if (lobbyRoomNode.length) {
                 lobbyRoomJid = lobbyRoomNode.text();
-            } else {
-                // let's fallback to old location of lobbyroom node, TODO: to be removed in the future once
-                // everything is updated
-                const lobbyRoomOldNode = $(pres).find('>lobbyroom');
-
-                if (lobbyRoomOldNode.length) {
-                    lobbyRoomJid = lobbyRoomOldNode.text();
-                }
             }
 
-            this.eventEmitter.emit(XMPPEvents.ROOM_CONNECT_MEMBERS_ONLY_ERROR, lobbyRoomJid);
+            const waitingForHost = $(pres).find('>error[type="auth"]>waiting-for-host').length > 0;
+
+            this.eventEmitter.emit(XMPPEvents.ROOM_CONNECT_MEMBERS_ONLY_ERROR, lobbyRoomJid, waitingForHost);
+        } else if ((errorDescriptionNode = $(pres).find(
+                '>error[type="modify"]>displayname-required[xmlns="http://jitsi.org/jitmeet"]')).length) {
+            logger.warn('display name required ', pres);
+            this.eventEmitter.emit(XMPPEvents.DISPLAY_NAME_REQUIRED, errorDescriptionNode[0].attributes.lobby?.value);
         } else {
             logger.warn('onPresError ', pres);
             this.eventEmitter.emit(XMPPEvents.ROOM_CONNECT_ERROR);

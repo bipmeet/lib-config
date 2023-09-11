@@ -109,6 +109,25 @@ export class TPCUtils {
     }
 
     /**
+     * Updates the sender parameters in the stream encodings.
+     *
+     * @param {RTCRtpSender} sender - the sender associated with a MediaStreamTrack.
+     * @param {boolean} enable - whether the streams needs to be enabled or disabled.
+     * @returns {Promise} - A promise that resolves when the operation is successful, rejected otherwise.
+     */
+    _updateSenderEncodings(sender, enable) {
+        const parameters = sender.getParameters();
+
+        if (parameters?.encodings?.length) {
+            for (const encoding of parameters.encodings) {
+                encoding.active = enable;
+            }
+        }
+
+        return sender.setParameters(parameters);
+    }
+
+    /**
      * Ensures that the ssrcs associated with a FID ssrc-group appear in the correct order, i.e.,
      * the primary ssrc first and the secondary rtx ssrc later. This is important for unified
      * plan since we have only one FID group per media description.
@@ -357,7 +376,7 @@ export class TPCUtils {
      * send resolution might be downscaled based on cpu and bandwidth constraints.
      *
      * @param {JitsiLocalTrack} localVideoTrack - The local video track.
-     * @returns {number} The max encoded resolution for the given video track.
+     * @returns {number|null} The max encoded resolution for the given video track.
      */
     getConfiguredEncodeResolution(localVideoTrack) {
         const localTrack = localVideoTrack.getTrack();
@@ -366,13 +385,26 @@ export class TPCUtils {
         let maxHeight = 0;
 
         if (!videoSender) {
-            return maxHeight;
+            return null;
         }
         const parameters = videoSender.getParameters();
 
         if (!parameters?.encodings?.length) {
-            return maxHeight;
+            return null;
         }
+
+        const hasIncorrectConfig = this.pc._capScreenshareBitrate
+            ? parameters.encodings.every(encoding => encoding.active)
+            : parameters.encodings.some(encoding => !encoding.active);
+
+        // Check if every encoding is active for screenshare track when low fps screenshare is configured or some
+        // of the encodings are disabled when high fps screenshare is configured. In both these cases, the track
+        // encodings need to be reconfigured. This is needed when p2p->jvb switch happens and new sender constraints
+        // are not received by the client.
+        if (localVideoTrack.getVideoType() === VideoType.DESKTOP && hasIncorrectConfig) {
+            return null;
+        }
+
         for (const encoding in parameters.encodings) {
             if (parameters.encodings[encoding].active) {
                 const scaleResolutionDownBy
@@ -472,43 +504,36 @@ export class TPCUtils {
             return Promise.resolve();
         }
         parameters.encodings = this._getStreamEncodings(track);
-        const promise = transceiver.sender.setParameters(parameters);
 
         if (mediaType === MediaType.VIDEO) {
-            return this.pc._updateVideoSenderParameters(promise);
+            return this.pc._updateVideoSenderParameters(() => transceiver.sender.setParameters(parameters));
         }
 
-        return promise;
+        return transceiver.sender.setParameters(parameters);
     }
 
     /**
      * Resumes or suspends media on the peerconnection by setting the active state on RTCRtpEncodingParameters
      * associated with all the senders that have a track attached to it.
      *
-     * @param {boolean} enable - whether media needs to be enabled or suspended.
+     * @param {boolean} enable - whether outgoing media needs to be enabled or disabled.
+     * @param {string} mediaType - media type, 'audio' or 'video', if neither is passed, all outgoing media will either
+     * be enabled or disabled.
      * @returns {Promise} - A promise that is resolved when the change is succesful on all the senders, rejected
      * otherwise.
      */
-    setMediaTransferActive(enable) {
+    setMediaTransferActive(enable, mediaType) {
         logger.info(`${this.pc} ${enable ? 'Resuming' : 'Suspending'} media transfer.`);
 
-        const senders = this.pc.peerconnection.getSenders().filter(s => Boolean(s.track));
+        const senders = this.pc.peerconnection.getSenders()
+            .filter(s => Boolean(s.track) && (!mediaType || s.track.kind === mediaType));
         const promises = [];
 
         for (const sender of senders) {
-            const parameters = sender.getParameters();
-
-            if (parameters?.encodings?.length) {
-                for (const encoding of parameters.encodings) {
-                    encoding.active = enable;
-                }
-            }
-            const setActivePromise = sender.setParameters(parameters);
-
             if (sender.track.kind === MediaType.VIDEO) {
-                promises.push(this.pc._updateVideoSenderParameters(setActivePromise));
+                promises.push(this.pc._updateVideoSenderParameters(() => this._updateSenderEncodings(sender, enable)));
             } else {
-                promises.push(setActivePromise);
+                promises.push(this._updateSenderEncodings(sender, enable));
             }
         }
 
@@ -525,31 +550,6 @@ export class TPCUtils {
 
                 return Promise.resolve();
             });
-    }
-
-    /**
-     * Enables/disables video media transmission on the peer connection. When disabled the SDP video media direction in
-     * the local SDP will be adjusted to 'inactive' which means that no data will be sent nor accepted, but the
-     * connection should be kept alive. This is used for setting lastn=0 on p2p connection.
-     *
-     * @param {boolean} active - true to enable media transmission or false to disable.
-     * @returns {void}
-     */
-    setVideoTransferActive(active) {
-        const transceivers = this.pc.peerconnection.getTransceivers()
-            .filter(t => t.receiver && t.receiver.track && t.receiver.track.kind === MediaType.VIDEO);
-
-        logger.info(`${this.pc} ${active ? 'Enabling' : 'Suspending'} video media transfer.`);
-        transceivers.forEach(transceiver => {
-            const localTrackMids = Array.from(this.pc._localTrackTransceiverMids);
-            const direction = active
-                ? localTrackMids.find(mids => mids[1] === transceiver.mid)
-                    ? MediaDirection.SENDRECV : MediaDirection.RECVONLY
-                : MediaDirection.INACTIVE;
-
-            logger.debug(`Setting direction to ${direction} on mid=${transceiver.mid}`);
-            transceiver.direction = direction;
-        });
     }
 
     /**

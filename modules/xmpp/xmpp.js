@@ -1,3 +1,4 @@
+import { safeJsonParse } from '@jitsi/js-utils/json';
 import { getLogger } from '@jitsi/logger';
 import $ from 'jquery';
 import { $msg, Strophe } from 'strophe.js';
@@ -493,6 +494,24 @@ export default class XMPP extends Listenable {
             if (identity.type === 'breakout_rooms') {
                 this.breakoutRoomsComponentAddress = identity.name;
                 this._components.push(this.breakoutRoomsComponentAddress);
+
+                const processBreakoutRoomsFeatures = f => {
+                    this.breakoutRoomsFeatures = {};
+
+                    f.forEach(fr => {
+                        if (fr.endsWith('#rename')) {
+                            this.breakoutRoomsFeatures.rename = true;
+                        }
+                    });
+                };
+
+                if (features) {
+                    processBreakoutRoomsFeatures(features);
+                } else {
+                    identity.name && this.caps.getFeaturesAndIdentities(identity.name, identity.type)
+                        .then(({ features: f }) => processBreakoutRoomsFeatures(f))
+                        .catch(e => logger.warn('Error getting features for breakout rooms.', e && e.message));
+                }
             }
 
             if (identity.type === 'room_metadata') {
@@ -988,7 +1007,7 @@ export default class XMPP extends Listenable {
         }
 
         try {
-            const json = JSON.parse(jsonString);
+            const json = safeJsonParse(jsonString);
 
             // Handle non-exception-throwing cases:
             // Neither JSON.parse(false) or JSON.parse(1234) throw errors,
@@ -1098,7 +1117,10 @@ export default class XMPP extends Listenable {
             Statistics.analytics.addPermanentProperties({ ...logObject });
 
             logObject.id = 'deployment_info';
-            Statistics.sendLog(JSON.stringify(logObject));
+            const entry = JSON.stringify(logObject);
+
+            Statistics.sendLog(entry);
+            logger.info(entry);
         }
 
         this.sendDeploymentInfo = false;

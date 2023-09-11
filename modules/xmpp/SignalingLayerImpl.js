@@ -1,3 +1,4 @@
+import { safeJsonParse } from '@jitsi/js-utils/json';
 import { getLogger } from '@jitsi/logger';
 import { Strophe } from 'strophe.js';
 
@@ -136,7 +137,7 @@ export default class SignalingLayerImpl extends SignalingLayer {
         this._sourceInfoHandler = (node, mucNick) => {
             const endpointId = mucNick;
             const { value } = node;
-            const sourceInfoJSON = JSON.parse(value);
+            const sourceInfoJSON = safeJsonParse(value);
             const emitEventsFromHere = this._doesEndpointSendNewSourceInfo(endpointId);
             const endpointSourceState
                 = this._remoteSourceState[endpointId] || (this._remoteSourceState[endpointId] = {});
@@ -268,9 +269,12 @@ export default class SignalingLayerImpl extends SignalingLayer {
 
         if (mediaType === MediaType.VIDEO) {
             mediaInfo.videoType = undefined;
+            const codecListNode = filterNodeFromPresenceJSON(lastPresence, 'jitsi_participant_codecList');
             const codecTypeNode = filterNodeFromPresenceJSON(lastPresence, 'jitsi_participant_codecType');
 
-            if (codecTypeNode.length > 0) {
+            if (codecListNode.length) {
+                mediaInfo.codecList = codecListNode[0].value?.split(',') ?? [];
+            } else if (codecTypeNode.length > 0) {
                 mediaInfo.codecType = codecTypeNode[0].value;
             }
         }
@@ -373,6 +377,7 @@ export default class SignalingLayerImpl extends SignalingLayer {
         }
 
         this._localSourceState[sourceName].muted = muted;
+        logger.debug(`Mute state of ${sourceName} changed to muted=${muted}`);
 
         if (this.chatRoom) {
             return this._addLocalSourceInfoToPresence();

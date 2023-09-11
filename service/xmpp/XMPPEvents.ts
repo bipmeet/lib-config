@@ -97,6 +97,11 @@ export enum XMPPEvents {
      * Screen share prop has been changed for participant.
      */
     SCREEN_SHARING_ACCESS_CHANGED_FOR_PARTICIPANT = 'xmpp.screen_sharing_access_changed_for_participant',
+    
+    /**
+     * Event for incoming presence error which is for required display name.
+     */
+    DISPLAY_NAME_REQUIRED = 'xmpp.display_name_required',
 
     /**
      * Chat room instance have been added to Strophe.emuc plugin.
