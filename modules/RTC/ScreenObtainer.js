@@ -136,10 +136,33 @@ const ScreenObtainer = {
                         options.desktopSharingSources || desktopSharingSources || [ 'screen', 'window' ]
                 },
                 (streamId, streamType, screenShareAudio = false) => {
-                    if (streamId) {
+                    if (streamId) {        let audioConstraints = false;
 
-                        let constraints = {
-                            audio: false,
+                        if (screenShareAudio) {
+                            audioConstraints = {};
+                            const optionalConstraints = this._getAudioConstraints();
+
+                            if (typeof optionalConstraints !== 'boolean') {
+                                audioConstraints = {
+                                    optional: optionalConstraints
+                                };
+                            }
+
+                            // Audio screen sharing for electron only works for screen type devices.
+                            // i.e. when the user shares the whole desktop.
+                            // Note. The documentation specifies that chromeMediaSourceId should not be present
+                            // which, in the case a users has multiple monitors, leads to them being shared all
+                            // at once. However we tested with chromeMediaSourceId present and it seems to be
+                            // working properly.
+                            if (streamType === 'screen') {
+                                audioConstraints.mandatory = {
+                                    chromeMediaSource: 'desktop'
+                                };
+                            }
+                        }
+
+                        const constraints = {
+                            audio: audioConstraints,
                             video: {
                                 mandatory: {
                                     chromeMediaSource: 'desktop',
@@ -153,22 +176,6 @@ const ScreenObtainer = {
                                 }
                             }
                         };
-
-                        if (screenShareAudio) {
-                            constraints = {
-                                audio: {
-                                    mandatory: {
-                                        echoCancellation: true,
-                                        chromeMediaSource: 'desktop'
-                                    }
-                                },
-                                video: {
-                                    mandatory: {
-                                        chromeMediaSource: 'desktop'
-                                    }
-                                }
-                            };
-                        }
 
                         // We have to use the old API on Electron to get a desktop stream.
                         navigator.mediaDevices.getUserMedia(constraints)
