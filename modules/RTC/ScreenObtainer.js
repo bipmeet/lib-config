@@ -138,6 +138,21 @@ const ScreenObtainer = {
                 (streamId, streamType, screenShareAudio = false) => {
                     if (streamId) {
                         let audioConstraints = false;
+                        let constraints = {
+                            audio: audioConstraints,
+                            video: {
+                                mandatory: {
+                                    chromeMediaSource: 'desktop',
+                                    chromeMediaSourceId: streamId,
+                                    minFrameRate: desktopSharingFrameRate?.min ?? SS_DEFAULT_FRAME_RATE,
+                                    maxFrameRate: desktopSharingFrameRate?.max ?? SS_DEFAULT_FRAME_RATE,
+                                    minWidth: desktopSharingResolution?.width?.min,
+                                    minHeight: desktopSharingResolution?.height?.min,
+                                    maxWidth: desktopSharingResolution?.width?.max ?? window.screen.width,
+                                    maxHeight: desktopSharingResolution?.height?.max ?? window.screen.height
+                                }
+                            }
+                        };
 
                         if (screenShareAudio) {
                             audioConstraints = {};
@@ -161,23 +176,17 @@ const ScreenObtainer = {
                                     echoCancellation: true
                                 };
                             }
-                        }
 
-                        const constraints = {
-                            audio: audioConstraints,
-                            video: {
-                                mandatory: {
-                                    chromeMediaSource: 'desktop',
-                                    chromeMediaSourceId: streamId,
-                                    minFrameRate: desktopSharingFrameRate?.min ?? SS_DEFAULT_FRAME_RATE,
-                                    maxFrameRate: desktopSharingFrameRate?.max ?? SS_DEFAULT_FRAME_RATE,
-                                    minWidth: desktopSharingResolution?.width?.min,
-                                    minHeight: desktopSharingResolution?.height?.min,
-                                    maxWidth: desktopSharingResolution?.width?.max ?? window.screen.width,
-                                    maxHeight: desktopSharingResolution?.height?.max ?? window.screen.height
+
+                            constraints = {
+                                audio: audioConstraints,
+                                video: {
+                                    mandatory: {
+                                        chromeMediaSource: 'desktop'
+                                    }
                                 }
-                            }
-                        };
+                            };
+                        }
 
                         // We have to use the old API on Electron to get a desktop stream.
                         navigator.mediaDevices.getUserMedia(constraints)
