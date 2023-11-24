@@ -182,7 +182,8 @@ const ScreenObtainer = {
                                 audio: audioConstraints,
                                 video: {
                                     mandatory: {
-                                        chromeMediaSource: 'desktop'
+                                        chromeMediaSource: 'desktop',
+                                        chromeMediaSourceId: streamId
                                     }
                                 }
                             };
