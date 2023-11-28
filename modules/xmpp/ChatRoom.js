@@ -372,12 +372,10 @@ export default class ChatRoom extends Listenable {
 
             const autoRecordingWithoutAction = $(result).find('>query>feature[var="auto_recording_without_action"]').length === 1;
 
-            const disallowParticipantMultipleJoin = $(result).find('>query>feature[var="disallow_participant_multiple_join"]').length === 1;
-
             this.eventEmitter.emit(XMPPEvents.MUC_ROOM_VISIBILITY_CHANGED,
                     specialRoom, roomOwner, externalScheduled, coHost, autoRecording,
                     disableMuteOthers, whiteListEnabled, disableParticipantChat,
-                    liveStreamEnable, autoRecordingWithoutAction, disallowParticipantMultipleJoin);
+                    liveStreamEnable, autoRecordingWithoutAction);
 
             const everybodyHasMicAccess
                 = $(result).find('>query>x[type="result"]>field[var="muc#roomconfig_bip_allow_microphone"]>value')
@@ -1338,8 +1336,19 @@ export default class ChatRoom extends Listenable {
             logger.warn('display name required ', pres);
             this.eventEmitter.emit(XMPPEvents.DISPLAY_NAME_REQUIRED, errorDescriptionNode[0].attributes.lobby?.value);
         } else {
+            const msgNode = $(pres).find('>error[type="cancel"]>text');
+            let msg;
+
+            if (msgNode.length) {
+                msg = msgNode.text();
+            }
             logger.warn('onPresError ', pres);
-            this.eventEmitter.emit(XMPPEvents.ROOM_CONNECT_ERROR);
+
+            if (msg) {
+                this.eventEmitter.emit(XMPPEvents.ROOM_CONNECT_ERROR, msg);
+            } else {
+                this.eventEmitter.emit(XMPPEvents.ROOM_CONNECT_ERROR);
+            }
         }
     }
 
