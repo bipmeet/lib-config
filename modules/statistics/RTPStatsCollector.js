@@ -406,6 +406,18 @@ StatsCollector.prototype._processAndEmitReport = function() {
     });
     this.audioLevelReportHistory = {};
 
+    logger.log("XXXX: Connection_Stats: ", {
+        'bandwidth': this.conferenceStats.bandwidth,
+        'bitrate': this.conferenceStats.bitrate,
+        'packetLoss': this.conferenceStats.packetLoss,
+        'resolution': JSON.stringify(resolutions),
+        'framerate': framerates,
+        'codec': JSON.stringify(codecs),
+        'transport': this.conferenceStats.transport,
+        localAvgAudioLevels,
+        avgAudioLevels
+    })
+
     this.eventEmitter.emit(
         StatisticsEvents.CONNECTION_STATS,
         this.peerconnection,
