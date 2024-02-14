@@ -1293,7 +1293,18 @@ export default class ChatRoom extends Listenable {
                         + 'xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"]')
                 .length) {
             logger.log('on password required', from);
-            this.eventEmitter.emit(XMPPEvents.PASSWORD_REQUIRED);
+            let msg;
+
+            if ($(pres)
+            .find('>error[type="auth"]>text')?.length) {
+
+                msg = $(pres)
+                    .find('>error[type="auth"]>text').text();
+
+            }
+            msg ? this.eventEmitter.emit(XMPPEvents.PASSWORD_REQUIRED, msg)
+                : this.eventEmitter.emit(XMPPEvents.PASSWORD_REQUIRED);
+
         } else if ($(pres)
                 .find(
                     '>error[type="cancel"]'
