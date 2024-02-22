@@ -214,8 +214,10 @@ export default class ChatRoom extends Listenable {
      * @returns {Promise} - resolved when join completes. At the time of this
      * writing it's never rejected.
      */
-    join(password, replaceParticipant) {
+    join(password, replaceParticipant, captchaId, captchaValue) {
         this.password = password;
+        this.captchaId = captchaId;
+        this.captchaValue = captchaValue;
         this.replaceParticipant = replaceParticipant;
 
         return new Promise(resolve => {
@@ -268,6 +270,8 @@ export default class ChatRoom extends Listenable {
 
             if (this.password) {
                 pres.c('password').t(this.password).up();
+                pres.c('captchaId').t(this.captchaId).up();
+                pres.c('captchaValue').t(this.captchaValue).up();
             }
             if (this.options.billingId) {
                 pres.c('billingid').t(this.options.billingId).up();
@@ -1289,7 +1293,18 @@ export default class ChatRoom extends Listenable {
                         + 'xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"]')
                 .length) {
             logger.log('on password required', from);
-            this.eventEmitter.emit(XMPPEvents.PASSWORD_REQUIRED);
+            let msg;
+
+            if ($(pres)
+            .find('>error[type="auth"]>text')?.length) {
+
+                msg = $(pres)
+                    .find('>error[type="auth"]>text').text();
+
+            }
+            msg ? this.eventEmitter.emit(XMPPEvents.PASSWORD_REQUIRED, msg)
+                : this.eventEmitter.emit(XMPPEvents.PASSWORD_REQUIRED);
+
         } else if ($(pres)
                 .find(
                     '>error[type="cancel"]'
