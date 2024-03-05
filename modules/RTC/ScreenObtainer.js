@@ -265,7 +265,6 @@ const ScreenObtainer = {
         getDisplayMedia(constraints)
             .then(stream => {
 
-                console.log('%cmodules/RTC/ScreenObtainer.js:268 getDisplayMedia stream', 'color: #007acc;', stream);
                 const state = APP.store.getState();
                 const { videoModerationEnabled } = state['features/av-moderation'];
                 const { privateRoom, roomOwner } = state['features/base/conference'];
