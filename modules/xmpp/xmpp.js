@@ -11,12 +11,12 @@ import browser from '../browser';
 import { E2EEncryption } from '../e2ee/E2EEncryption';
 import FeatureFlags from '../flags/FeatureFlags';
 import Statistics from '../statistics/statistics';
-import GlobalOnErrorHandler from '../util/GlobalOnErrorHandler';
 import Listenable from '../util/Listenable';
 import RandomUtil from '../util/RandomUtil';
 
 import Caps, { parseDiscoInfo } from './Caps';
 import XmppConnection from './XmppConnection';
+import Moderator from './moderator';
 import MucConnectionPlugin from './strophe.emuc';
 import JingleConnectionPlugin from './strophe.jingle';
 import initStropheLogger from './strophe.logger';
@@ -118,7 +118,6 @@ export default class XMPP extends Listenable {
      * @param {Object} options
      * @param {String} options.serviceUrl - URL passed to the XMPP client which will be used to establish XMPP
      * connection with the server.
-     * @param {String} options.bosh - Deprecated, use {@code serviceUrl}.
      * @param {boolean} options.enableWebsocketResume - Enables XEP-0198 stream management which will make the XMPP
      * module try to resume the session in case the Websocket connection breaks.
      * @param {number} [options.websocketKeepAlive] - The websocket keep alive interval. See {@link XmppConnection}
@@ -131,6 +130,11 @@ export default class XMPP extends Listenable {
      */
     constructor(options, token) {
         super();
+
+        if (options.bosh && !options.serviceUrl) {
+            throw new Error('The "bosh" option is no longer supported, please use "serviceUrl" instead');
+        }
+
         this.connection = null;
         this.disconnectInProgress = false;
         this.connectionTimes = {};
@@ -154,15 +158,15 @@ export default class XMPP extends Listenable {
 
         this.connection = createConnection({
             enableWebsocketResume: options.enableWebsocketResume,
-
-            // FIXME remove deprecated bosh option at some point
-            serviceUrl: options.serviceUrl || options.bosh,
+            serviceUrl: options.serviceUrl,
             token,
             websocketKeepAlive: options.websocketKeepAlive,
             websocketKeepAliveUrl: options.websocketKeepAliveUrl,
             xmppPing,
             shard: options.deploymentInfo.shard
         });
+
+        this.moderator = new Moderator(this);
 
         // forwards the shard changed event
         this.connection.on(XmppConnection.Events.CONN_SHARD_CHANGED, () => {
@@ -228,8 +232,10 @@ export default class XMPP extends Listenable {
             this.caps.addFeature('http://jitsi.org/remb');
         }
 
-        // Disable TCC on Firefox because of a known issue where BWE is halved on every renegotiation.
-        if (!browser.isFirefox() && (typeof this.options.enableTcc === 'undefined' || this.options.enableTcc)) {
+        // Disable TCC on Firefox 114 and older versions because of a known issue where BWE is halved on every
+        // renegotiation.
+        if (!(browser.isFirefox() && browser.isVersionLessThan(115))
+            && (typeof this.options.enableTcc === 'undefined' || this.options.enableTcc)) {
             this.caps.addFeature('http://jitsi.org/tcc');
         }
 
@@ -332,11 +338,7 @@ export default class XMPP extends Listenable {
                         identities, undefined /* when querying we will query for features */);
                 })
                 .catch(error => {
-                    const errmsg = 'Feature discovery error';
-
-                    GlobalOnErrorHandler.callErrorHandler(
-                        new Error(`${errmsg}: ${error}`));
-                    logger.error(errmsg, error);
+                    logger.error('Feature discovery error', error);
 
                     this._maybeSendDeploymentInfoStat(true);
                 });
@@ -518,6 +520,10 @@ export default class XMPP extends Listenable {
                 this.roomMetadataComponentAddress = identity.name;
                 this._components.push(this.roomMetadataComponentAddress);
             }
+
+            if (identity.type === 'visitors') {
+                this._components.push(identity.name);
+            }
         });
 
         this._maybeSendDeploymentInfoStat(true);
@@ -694,6 +700,8 @@ export default class XMPP extends Listenable {
             jid = configDomain || (location && location.hostname);
         }
 
+        this._startConnecting = true;
+
         return this._connect(jid, password);
     }
 
@@ -807,7 +815,9 @@ export default class XMPP extends Listenable {
     disconnect(ev) {
         if (this.disconnectInProgress) {
             return this.disconnectInProgress;
-        } else if (!this.connection) {
+        } else if (!this.connection || !this._startConnecting) {
+            // we have created a connection, but never called connect we still want to resolve on calling disconnect
+            // this is visitors use case when using http to send conference request.
             return Promise.resolve();
         }
 
@@ -865,6 +875,8 @@ export default class XMPP extends Listenable {
         }
 
         this.connection.disconnect();
+
+        this._startConnecting = false;
 
         if (this.connection.options.sync !== true) {
             this.connection.flush();
@@ -1074,6 +1086,8 @@ export default class XMPP extends Listenable {
             this.eventEmitter.emit(XMPPEvents.BREAKOUT_ROOMS_EVENT, parsedJson);
         } else if (parsedJson[JITSI_MEET_MUC_TYPE] === 'room_metadata') {
             this.eventEmitter.emit(XMPPEvents.ROOM_METADATA_EVENT, parsedJson);
+        } else if (parsedJson[JITSI_MEET_MUC_TYPE] === 'visitors') {
+            this.eventEmitter.emit(XMPPEvents.VISITORS_MESSAGE, parsedJson);
         }
 
         return true;
@@ -1119,7 +1133,6 @@ export default class XMPP extends Listenable {
             logObject.id = 'deployment_info';
             const entry = JSON.stringify(logObject);
 
-            Statistics.sendLog(entry);
             logger.info(entry);
         }
 
