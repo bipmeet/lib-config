@@ -2726,9 +2726,12 @@ TraceablePeerConnection.prototype._updateVideoSenderEncodings = function(frameHe
     const isSharingLowFpsScreen = localVideoTrack.getVideoType() === VideoType.DESKTOP && this._capScreenshareBitrate;
 
     // Set the degradation preference.
-    const preference = isSharingLowFpsScreen
-        ? DEGRADATION_PREFERENCE_DESKTOP // Prefer resolution for low fps share.
-        : DEGRADATION_PREFERENCE_CAMERA; // Prefer frame-rate for high fps share and camera.
+    // const preference = isSharingLowFpsScreen
+    //     ? DEGRADATION_PREFERENCE_DESKTOP // Prefer resolution for low fps share.
+    //     : DEGRADATION_PREFERENCE_CAMERA; // Prefer frame-rate for high fps share and camera.
+
+    // Set the degradation preference.
+    const preference = DEGRADATION_PREFERENCE_DESKTOP;
 
     parameters.degradationPreference = preference;
     logger.info(`${this} Setting degradation preference [preference=${preference},track=${localVideoTrack}`);
