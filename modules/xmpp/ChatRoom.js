@@ -214,10 +214,12 @@ export default class ChatRoom extends Listenable {
      * @returns {Promise} - resolved when join completes. At the time of this
      * writing it's never rejected.
      */
-    join(password, replaceParticipant, captchaId, captchaValue) {
+    join(password, replaceParticipant, captchaId, captchaValue, email, ldapPassword) {
         this.password = password;
         this.captchaId = captchaId;
         this.captchaValue = captchaValue;
+        this.email = email;
+        this.ldapPassword = ldapPassword;
         this.replaceParticipant = replaceParticipant;
 
         return new Promise(resolve => {
@@ -272,6 +274,12 @@ export default class ChatRoom extends Listenable {
                 pres.c('password').t(this.password).up();
                 pres.c('captchaId').t(this.captchaId).up();
                 pres.c('captchaValue').t(this.captchaValue).up();
+            }
+            if (this.email) {
+                pres.c('email').t(this.email).up();
+            }
+            if (this.ldapPassword) {
+                pres.c('user_password').t(this.ldapPassword).up();
             }
             if (this.options.billingId) {
                 pres.c('billingid').t(this.options.billingId).up();
@@ -1350,6 +1358,37 @@ export default class ChatRoom extends Listenable {
                 '>error[type="modify"]>displayname-required[xmlns="http://jitsi.org/jitmeet"]')).length) {
             logger.warn('display name required ', pres);
             this.eventEmitter.emit(XMPPEvents.DISPLAY_NAME_REQUIRED, errorDescriptionNode[0].attributes.lobby?.value);
+        } else if ($(pres)
+            .find('>error[type="modify"]'
+                + '>email-required['
+                + 'xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"]').length
+            || $(pres)
+            .find('>error[type="modify"]'
+                + '>ldap-auth-required['
+                + 'xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"]').length
+            || $(pres)
+            .find('>error[type="modify"]'
+                + '>ldap-auth-error['
+                + 'xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"]').length) {
+
+            const isLdapForce = $(pres).find('>error[type="modify"]>ldap-auth-required');
+            const isLdapError = $(pres).find('>error[type="modify"]>ldap-auth-error');
+
+            const msgNode = $(pres).find('>error[type="modify"]>text');
+            let msg = '';
+
+            if (msgNode.length) {
+                msg = msgNode.text();
+            }
+
+            if (isLdapForce.length || isLdapError.length) {
+                this.eventEmitter.emit(XMPPEvents.AUTHENTICATION_REQUIRED, {
+                    type: 'ldap-auth-required',
+                    errmsg: msg
+                });
+            } else {
+                this.eventEmitter.emit(XMPPEvents.AUTHENTICATION_REQUIRED, { type: 'email-required' });
+            }
         } else {
             const msgNode = $(pres).find('>error[type="cancel"]>text');
             let msg;
