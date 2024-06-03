@@ -384,10 +384,12 @@ export default class ChatRoom extends Listenable {
 
             const autoRecordingWithoutAction = $(result).find('>query>feature[var="auto_recording_without_action"]').length === 1;
 
+            const visitorChat = $(result).find('>query>feature[var="visitor_chat"]').length === 1;
+
             this.eventEmitter.emit(XMPPEvents.MUC_ROOM_VISIBILITY_CHANGED,
                     specialRoom, roomOwner, externalScheduled, coHost, autoRecording,
                     disableMuteOthers, whiteListEnabled, disableParticipantChat,
-                    liveStreamEnable, autoRecordingWithoutAction);
+                    liveStreamEnable, autoRecordingWithoutAction, visitorChat);
 
             const everybodyHasMicAccess
                 = $(result).find('>query>x[type="result"]>field[var="muc#roomconfig_bip_allow_microphone"]>value')
