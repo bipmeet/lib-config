@@ -4,6 +4,7 @@ import * as exported from "./JitsiConferenceErrors";
 
 describe( "/JitsiConferenceErrors members", () => {
     const {
+        WEBINAR_AUTHENTICATION_REQUIRED,
         AUTHENTICATION_REQUIRED,
         CHAT_ERROR,
         SETTINGS_ERROR,
@@ -31,6 +32,7 @@ describe( "/JitsiConferenceErrors members", () => {
     } = exported;
 
     it( "known members", () => {
+        expect( WEBINAR_AUTHENTICATION_REQUIRED ).toBe( 'conference.webinarAuthenticationRequired' );
         expect( AUTHENTICATION_REQUIRED ).toBe( 'conference.authenticationRequired' );
         expect( CHAT_ERROR ).toBe( 'conference.chatError' );
         expect( SETTINGS_ERROR ).toBe( 'conference.settingsError' );
@@ -56,6 +58,7 @@ describe( "/JitsiConferenceErrors members", () => {
 
         expect( JitsiConferenceErrors ).toBeDefined();
 
+        expect( JitsiConferenceErrors.WEBINAR_AUTHENTICATION_REQUIRED ).toBe( 'conference.webinarAuthenticationRequired' );
         expect( JitsiConferenceErrors.AUTHENTICATION_REQUIRED ).toBe( 'conference.authenticationRequired' );
         expect( JitsiConferenceErrors.CHAT_ERROR ).toBe( 'conference.chatError' );
         expect( JitsiConferenceErrors.SETTINGS_ERROR ).toBe( 'conference.settingsError' );

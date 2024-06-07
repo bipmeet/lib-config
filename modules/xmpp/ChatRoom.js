@@ -1384,12 +1384,12 @@ export default class ChatRoom extends Listenable {
             }
 
             if (isLdapForce.length || isLdapError.length) {
-                this.eventEmitter.emit(XMPPEvents.AUTHENTICATION_REQUIRED, {
+                this.eventEmitter.emit(XMPPEvents.WEBINAR_AUTHENTICATION_REQUIRED, {
                     type: 'ldap-auth-required',
                     errmsg: msg
                 });
             } else {
-                this.eventEmitter.emit(XMPPEvents.AUTHENTICATION_REQUIRED, { type: 'email-required' });
+                this.eventEmitter.emit(XMPPEvents.WEBINAR_AUTHENTICATION_REQUIRED, { type: 'email-required' });
             }
         } else {
             const msgNode = $(pres).find('>error[type="cancel"]>text');

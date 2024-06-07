@@ -221,6 +221,10 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
         JitsiConferenceEvents.CONFERENCE_FAILED,
         JitsiConferenceErrors.PASSWORD_REQUIRED);
 
+    this.chatRoomForwarder.forward(XMPPEvents.WEBINAR_AUTHENTICATION_REQUIRED,
+        JitsiConferenceEvents.CONFERENCE_FAILED,
+        JitsiConferenceErrors.WEBINAR_AUTHENTICATION_REQUIRED);
+
     this.chatRoomForwarder.forward(XMPPEvents.AUTHENTICATION_REQUIRED,
         JitsiConferenceEvents.CONFERENCE_FAILED,
         JitsiConferenceErrors.AUTHENTICATION_REQUIRED);

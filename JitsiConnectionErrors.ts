@@ -30,11 +30,18 @@ export enum JitsiConnectionErrors {
      * Indicates that the connection was dropped, because of too many 5xx HTTP
      * errors on BOSH requests.
      */
-    SERVER_ERROR = 'connection.serverError'
+    SERVER_ERROR = 'connection.serverError',
+
+    /**
+     * Indicates that the connection was dropped, because of too many 5xx HTTP
+     * errors on BOSH requests.
+     */
+    WEBINAR_AUTHENTICATION_REQUIRED = 'connection.webinarAuthenticationRequired'
 };
 
 // exported for backward compatibility
 export const CONNECTION_DROPPED_ERROR = JitsiConnectionErrors.CONNECTION_DROPPED_ERROR;
 export const OTHER_ERROR = JitsiConnectionErrors.OTHER_ERROR;
 export const PASSWORD_REQUIRED = JitsiConnectionErrors.PASSWORD_REQUIRED;
+export const WEBINAR_AUTHENTICATION_REQUIRED = JitsiConnectionErrors.WEBINAR_AUTHENTICATION_REQUIRED;
 export const SERVER_ERROR = JitsiConnectionErrors.SERVER_ERROR;
