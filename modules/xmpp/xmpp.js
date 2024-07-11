@@ -896,6 +896,14 @@ export default class XMPP extends Listenable {
                 = this.options.p2p.iceTransportPolicy;
         }
 
+        if (this.options.p2p && this.options.p2p.pruneTurnPorts) {
+            logger.info('P2P Prune Turn Ports: ',
+                this.options.p2p.pruneTurnPorts);
+
+            iceConfig.p2p.pruneTurnPorts
+                = this.options.p2p.pruneTurnPorts;
+        }
+
         this.connection.addConnectionPlugin('emuc', new MucConnectionPlugin(this));
         this.connection.addConnectionPlugin('jingle', new JingleConnectionPlugin(this, this.eventEmitter, iceConfig));
         this.connection.addConnectionPlugin('rayo', new RayoConnectionPlugin());
