@@ -12,6 +12,7 @@ export enum XMPPEvents {
     // camera.
     VIDEO_MUTED_BY_FOCUS = 'xmpp.video_muted_by_focus',
     AUTHENTICATION_REQUIRED = 'xmpp.authentication_required',
+    WEBINAR_AUTHENTICATION_REQUIRED = 'xmpp.webinar_authentication_required',
     BRIDGE_DOWN = 'xmpp.bridge_down',
 
     /**
