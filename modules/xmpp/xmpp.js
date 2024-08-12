@@ -239,20 +239,6 @@ export default class XMPP extends Listenable {
             this.caps.addFeature('http://jitsi.org/tcc');
         }
 
-        // this is dealt with by SDP O/A so we don't need to announce this
-        // XEP-0293
-        // this.caps.addFeature('urn:xmpp:jingle:apps:rtp:rtcp-fb:0');
-        // XEP-0294
-        // this.caps.addFeature('urn:xmpp:jingle:apps:rtp:rtp-hdrext:0');
-
-        // this.caps.addFeature('urn:ietf:rfc:5576'); // a=ssrc
-
-        // Enable Lipsync ?
-        if (browser.isChromiumBased() && this.options.enableLipSync === true) {
-            logger.info('Lip-sync enabled !');
-            this.caps.addFeature('http://jitsi.org/meet/lipsync');
-        }
-
         if (this.connection.rayo) {
             this.caps.addFeature('urn:xmpp:rayo:client:1');
         }
@@ -277,9 +263,7 @@ export default class XMPP extends Listenable {
         // the version added in moderator.js, this one here is mostly defined
         // for keeping stats, since it is not made available to jocofo at
         // the time of the initial conference-request.
-        if (FeatureFlags.isJoinAsVisitorSupported()) {
-            this.caps.addFeature('http://jitsi.org/visitors-1');
-        }
+        this.caps.addFeature('http://jitsi.org/visitors-1');
     }
 
     /**
@@ -457,11 +441,6 @@ export default class XMPP extends Listenable {
                 this._components.push(this.speakerStatsComponentAddress);
             }
 
-            if (identity.type === 'conference_duration') {
-                this.conferenceDurationComponentAddress = identity.name;
-                this._components.push(this.conferenceDurationComponentAddress);
-            }
-
             if (identity.type === 'lobbyrooms') {
                 this.lobbySupported = true;
                 const processLobbyFeatures = f => {
@@ -544,6 +523,7 @@ export default class XMPP extends Listenable {
             return null;
         }
 
+        FAILURE_REGEX.lastIndex = 0;
         const matches = FAILURE_REGEX.exec(msg);
 
         return matches ? matches[1] : null;
@@ -1137,5 +1117,16 @@ export default class XMPP extends Listenable {
         }
 
         this.sendDeploymentInfo = false;
+
+        const { region, shard } = aprops;
+
+        if (region || shard) {
+            // avoids sending empty values
+            this.eventEmitter.emit(JitsiConnectionEvents.PROPERTIES_UPDATED, JSON.parse(JSON.stringify({
+                region,
+                shard
+            })));
+        }
+
     }
 }
