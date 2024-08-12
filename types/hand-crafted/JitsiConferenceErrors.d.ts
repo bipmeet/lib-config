@@ -1,4 +1,5 @@
 export enum JitsiConferenceErrors {
+  WEBINAR_AUTHENTICATION_REQUIRED = 'conference.webinarAuthenticationRequired',
   AUTHENTICATION_REQUIRED = 'conference.authenticationRequired',
   CHAT_ERROR = 'conference.chatError',
   CONFERENCE_DESTROYED = 'conference.destroyed',

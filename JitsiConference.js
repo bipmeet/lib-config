@@ -561,9 +561,10 @@ JitsiConference.prototype._init = function(options = {}) {
  * @param replaceParticipant {boolean} whether the current join replaces
  * an existing participant with same jwt from the meeting.
  */
-JitsiConference.prototype.join = function(password, replaceParticipant = false, captchaId, captchaValue) {
+JitsiConference.prototype.join = function(password, replaceParticipant = false, captchaId, captchaValue, email, ldapPassword) {
     if (this.room) {
-        this.room.join(password, replaceParticipant, captchaId, captchaValue).then(() => this._maybeSetSITimeout());
+        this.room.join(password, replaceParticipant, captchaId, captchaValue, email, ldapPassword)
+        .then(() => this._maybeSetSITimeout());
     }
 };
 
