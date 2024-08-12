@@ -229,10 +229,12 @@ export default class ChatRoom extends Listenable {
      * @returns {Promise} - resolved when join completes. At the time of this
      * writing it's never rejected.
      */
-    join(password, replaceParticipant, captchaId, captchaValue) {
+    join(password, replaceParticipant, captchaId, captchaValue, email, ldapPassword) {
         this.password = password;
         this.captchaId = captchaId;
         this.captchaValue = captchaValue;
+        this.email = email;
+        this.ldapPassword = ldapPassword;
         this.replaceParticipant = replaceParticipant;
 
         return new Promise(resolve => {
@@ -287,8 +289,12 @@ export default class ChatRoom extends Listenable {
                 pres.c('captchaId').t(this.captchaId).up();
                 pres.c('captchaValue').t(this.captchaValue).up();
             }
-
-            // send the machineId with the initial presence
+            if (this.email) {
+                pres.c('email').t(this.email).up();
+            }
+            if (this.ldapPassword) {
+                pres.c('user_password').t(this.ldapPassword).up();
+            }
             if (this.xmpp.moderator.targetUrl) {
                 pres.c('billingid').t(Settings.machineId).up();
             }
@@ -392,10 +398,12 @@ export default class ChatRoom extends Listenable {
 
             const autoRecordingWithoutAction = $(result).find('>query>feature[var="auto_recording_without_action"]').length === 1;
 
+            const visitorChat = $(result).find('>query>feature[var="visitor_chat"]').length === 1;
+
             this.eventEmitter.emit(XMPPEvents.MUC_ROOM_VISIBILITY_CHANGED,
                     specialRoom, roomOwner, externalScheduled, coHost, autoRecording,
                     disableMuteOthers, whiteListEnabled, disableParticipantChat,
-                    liveStreamEnable, autoRecordingWithoutAction);
+                    liveStreamEnable, autoRecordingWithoutAction, visitorChat);
 
             const everybodyHasMicAccess
                 = $(result).find('>query>x[type="result"]>field[var="muc#roomconfig_bip_allow_microphone"]>value')
@@ -1407,6 +1415,37 @@ export default class ChatRoom extends Listenable {
                 '>error[type="modify"]>displayname-required[xmlns="http://jitsi.org/jitmeet"]')).length) {
             logger.warn('display name required ', pres);
             this.eventEmitter.emit(XMPPEvents.DISPLAY_NAME_REQUIRED, errorDescriptionNode[0].attributes.lobby?.value);
+        } else if ($(pres)
+            .find('>error[type="modify"]'
+                + '>email-required['
+                + 'xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"]').length
+            || $(pres)
+            .find('>error[type="modify"]'
+                + '>ldap-auth-required['
+                + 'xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"]').length
+            || $(pres)
+            .find('>error[type="modify"]'
+                + '>ldap-auth-error['
+                + 'xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"]').length) {
+
+            const isLdapForce = $(pres).find('>error[type="modify"]>ldap-auth-required');
+            const isLdapError = $(pres).find('>error[type="modify"]>ldap-auth-error');
+
+            const msgNode = $(pres).find('>error[type="modify"]>text');
+            let msg = '';
+
+            if (msgNode.length) {
+                msg = msgNode.text();
+            }
+
+            if (isLdapForce.length || isLdapError.length) {
+                this.eventEmitter.emit(XMPPEvents.WEBINAR_AUTHENTICATION_REQUIRED, {
+                    type: 'ldap-auth-required',
+                    errmsg: msg
+                });
+            } else {
+                this.eventEmitter.emit(XMPPEvents.WEBINAR_AUTHENTICATION_REQUIRED, { type: 'email-required' });
+            }
         } else {
             const msgNode = $(pres).find('>error[type="cancel"]>text');
             let msg;

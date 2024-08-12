@@ -6,6 +6,11 @@ export enum JitsiConferenceErrors {
     /**
      * Indicates that client must be authenticated to create the conference.
      */
+    WEBINAR_AUTHENTICATION_REQUIRED = 'conference.webinarAuthenticationRequired',
+
+    /**
+     * Indicates that client must be authenticated to create the conference.
+     */
     AUTHENTICATION_REQUIRED = 'conference.authenticationRequired',
 
     /**
@@ -117,6 +122,7 @@ export enum JitsiConferenceErrors {
 }
 
 // exported for backward compatibility
+export const WEBINAR_AUTHENTICATION_REQUIRED = JitsiConferenceErrors.WEBINAR_AUTHENTICATION_REQUIRED;
 export const AUTHENTICATION_REQUIRED = JitsiConferenceErrors.AUTHENTICATION_REQUIRED;
 export const CHAT_ERROR = JitsiConferenceErrors.CHAT_ERROR;
 export const SETTINGS_ERROR = JitsiConferenceErrors.SETTINGS_ERROR;
