@@ -311,26 +311,6 @@ export enum JitsiConferenceEvents {
      */
     ROOM_ALL_FEATURES_CHANGED = 'conference.room_all_features_changed',
  
-    /**
-     * Indicates that the region of the media server (jitsi-videobridge) that we
-     * are connected to changed (or was initially set).
-     * @type {string} the region.
-     */
-    SERVER_REGION_CHANGED = 'conference.server_region_changed',
-
-    /**
-     * An event(library-private) fired when a new media session is added to the conference.
-     * @type {string}
-     * @private
-     */
-    _MEDIA_SESSION_STARTED = 'conference.media_session.started',
-
-    /**
-     * An event(library-private) fired when the conference switches the currently active media session.
-     * @type {string}
-     * @private
-     */
-    _MEDIA_SESSION_ACTIVE_CHANGED = 'conference.media_session.active_changed',
 
     /**
      * Indicates that the conference had changed to members only enabled/disabled.
@@ -603,9 +583,6 @@ export const LOCK_STATE_CHANGED = JitsiConferenceEvents.LOCK_STATE_CHANGED;
 export const SEC_VALUE_CHANGED_FOR_SPECIAL_ROOM = JitsiConferenceEvents.SEC_VALUE_CHANGED_FOR_SPECIAL_ROOM;
 export const ROOM_VISIBILITY_CHANGED = JitsiConferenceEvents.ROOM_VISIBILITY_CHANGED;
 export const ROOM_ALL_FEATURES_CHANGED = JitsiConferenceEvents.ROOM_ALL_FEATURES_CHANGED;
-export const SERVER_REGION_CHANGED = JitsiConferenceEvents.SERVER_REGION_CHANGED;
-export const _MEDIA_SESSION_STARTED = JitsiConferenceEvents._MEDIA_SESSION_STARTED;
-export const _MEDIA_SESSION_ACTIVE_CHANGED = JitsiConferenceEvents._MEDIA_SESSION_ACTIVE_CHANGED;
 export const MEMBERS_ONLY_CHANGED = JitsiConferenceEvents.MEMBERS_ONLY_CHANGED;
 export const MESSAGE_RECEIVED = JitsiConferenceEvents.MESSAGE_RECEIVED;
 export const METADATA_UPDATED = JitsiConferenceEvents.METADATA_UPDATED;
