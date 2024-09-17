@@ -441,6 +441,11 @@ export default class XMPP extends Listenable {
                 this._components.push(this.speakerStatsComponentAddress);
             }
 
+            if (identity.type === 'conference_duration') {
+                this.conferenceDurationComponentAddress = identity.name;
+                this._components.push(this.conferenceDurationComponentAddress);
+            }
+
             if (identity.type === 'lobbyrooms') {
                 this.lobbySupported = true;
                 const processLobbyFeatures = f => {

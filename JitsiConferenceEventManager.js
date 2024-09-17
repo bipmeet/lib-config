@@ -690,6 +690,11 @@ JitsiConferenceEventManager.prototype.setupXMPPListeners = function() {
         });
 
     this._addConferenceXMPPListener(XMPPEvents.CONFERENCE_TIMESTAMP_RECEIVED,
+        createdTimestamp => {
+            conference.eventEmitter.emit(JitsiConferenceEvents.CONFERENCE_CREATED_TIMESTAMP, createdTimestamp);
+        });
+
+    this._addConferenceXMPPListener(XMPPEvents.CONFERENCE_TIMESTAMP_RECEIVED,
         conferenceDurationObj => {
             conference.eventEmitter.emit(JitsiConferenceEvents.CONFERENCE_CREATED_TIMESTAMP, conferenceDurationObj);
         });
