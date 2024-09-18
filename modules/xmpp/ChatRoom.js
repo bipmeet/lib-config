@@ -453,14 +453,15 @@ export default class ChatRoom extends Listenable {
                 logger.warn('No meeting ID from backend');
             }
 
-            const meetingCreatedTSValEl
-                = $(result).find('>query>x[type="result"]>field[var="muc#roominfo_created_timestamp"]>value');
+            // Added with upgrade. We are not using it at the moment.
+            // const meetingCreatedTSValEl
+            //     = $(result).find('>query>x[type="result"]>field[var="muc#roominfo_created_timestamp"]>value');
 
-            if (meetingCreatedTSValEl.length) {
-                this.eventEmitter.emit(XMPPEvents.CONFERENCE_TIMESTAMP_RECEIVED, meetingCreatedTSValEl.text());
-            } else {
-                logger.warn('No conference duration from backend');
-            }
+            // if (meetingCreatedTSValEl.length) {
+            //     this.eventEmitter.emit(XMPPEvents.CONFERENCE_TIMESTAMP_RECEIVED, meetingCreatedTSValEl.text());
+            // } else {
+            //     logger.warn('No conference duration from backend');
+            // }
 
             const membersOnly = $(result).find('>query>feature[var="muc_membersonly"]').length === 1;
 
