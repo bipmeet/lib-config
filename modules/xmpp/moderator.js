@@ -436,6 +436,33 @@ Moderator.prototype._handleError = function(sessionError, notAuthorized, callbac
  */
 Moderator.prototype._handleIqError = function(error, callback) {
 
+    // The visitor counter functionality works over XMPP / Service.
+    // Handle the limit reach error and throw a XMPP error.
+    const serviceErr = $(error).find('error>service-unavailable');
+
+    if (serviceErr.length) {
+        // Trigger error event
+        const errorCode = serviceErr.attr('error-code');
+        const sessionIdError = serviceErr.attr('session-id');
+        const errorTextNode = $(error).find('>error>text');
+        let errorMsg;
+
+        if (errorTextNode) {
+            errorMsg = errorTextNode.text();
+        }
+
+        if (errorMsg === 'MAX_VISITOR_COUNT_REACHED') {
+            this.eventEmitter.emit(
+                XMPPEvents.ROOM_MAX_USERS_ERROR,
+                errorCode,
+                errorMsg,
+                sessionIdError
+            );
+
+            return;
+        }
+    }
+
     // The reservation system only works over XMPP. Handle the error separately.
     // Check for error returned by the reservation system
     const reservationErr = $(error).find('>error>reservation-error');
