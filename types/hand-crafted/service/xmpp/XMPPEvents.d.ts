@@ -30,6 +30,7 @@
   LOCAL_ROLE_CHANGED = 'xmpp.localrole_changed',
   MEETING_ID_SET = 'xmpp.meeting_id_set',
   MESSAGE_RECEIVED = 'xmpp.message_received',
+  TOTAL_VISITOR_COUNT_MESSAGE_RECEIVED = 'xmpp.total_visitor_count_message_received',
   INVITE_MESSAGE_RECEIVED = 'xmpp.invite_message_received',
   PRIVATE_MESSAGE_RECEIVED = 'xmpp.private_message_received',
   MUC_MEMBER_BOT_TYPE_CHANGED = 'xmpp.muc_member_bot_type_changed',

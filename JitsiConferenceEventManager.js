@@ -403,6 +403,14 @@ JitsiConferenceEventManager.prototype.setupChatRoomListeners = function() {
         });
 
     chatRoom.addListener(
+        XMPPEvents.TOTAL_VISITOR_COUNT_MESSAGE_RECEIVED,
+        totalVisitorCount => {
+            conference.eventEmitter.emit(
+                JitsiConferenceEvents.TOTAL_VISITOR_COUNT_MESSAGE_RECEIVED,
+                totalVisitorCount);
+        });
+
+    chatRoom.addListener(
         XMPPEvents.PRIVATE_MESSAGE_RECEIVED,
 
         // eslint-disable-next-line max-params

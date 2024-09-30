@@ -326,6 +326,11 @@ export enum JitsiConferenceEvents {
     MESSAGE_RECEIVED = 'conference.messageReceived',
 
     /**
+     * New text message informing total visitor count received.
+     */
+    TOTAL_VISITOR_COUNT_MESSAGE_RECEIVED = 'conference.total_visitor_count_message_received',
+
+    /**
      * Event fired when the conference metadata is updated.
      */
     METADATA_UPDATED = 'conference.metadata.updated',
