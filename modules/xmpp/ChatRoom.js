@@ -1233,6 +1233,7 @@ export default class ChatRoom extends Listenable {
         }
 
         const txt = $(msg).find('>body').text();
+        const totalVisitorCount = $(msg).find('>total-visitor-count').text();
         const subject = $(msg).find('>subject');
 
         if (subject.length) {
@@ -1315,6 +1316,13 @@ export default class ChatRoom extends Listenable {
                 // a message with explicit name set
                 this.eventEmitter.emit(XMPPEvents.MESSAGE_RECEIVED,
                     from, txt, this.myroomjid, stamp, nickName, nick, Boolean(nick));
+            }
+        }
+
+        if (totalVisitorCount) {
+            if (type === 'groupchat') {
+                this.eventEmitter.emit(XMPPEvents.TOTAL_VISITOR_COUNT_MESSAGE_RECEIVED,
+                    Number(totalVisitorCount));
             }
         }
     }

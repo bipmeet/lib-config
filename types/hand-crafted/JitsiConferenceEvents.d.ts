@@ -28,6 +28,7 @@ export enum JitsiConferenceEvents {
   _MEDIA_SESSION_ACTIVE_CHANGED = 'conference.media_session.active_changed',
   MEMBERS_ONLY_CHANGED = 'conference.membersOnlyChanged',
   MESSAGE_RECEIVED = 'conference.messageReceived',
+  TOTAL_VISITOR_COUNT_MESSAGE_RECEIVED = 'conference.total_visitor_count_message_received',
   NO_AUDIO_INPUT = 'conference.no_audio_input',
   NOISY_MIC = 'conference.noisy_mic',
   NON_PARTICIPANT_MESSAGE_RECEIVED = 'conference.non_participant_message_received',

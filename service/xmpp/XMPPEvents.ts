@@ -153,6 +153,10 @@ export enum XMPPEvents {
     // received.
     MESSAGE_RECEIVED = 'xmpp.message_received',
 
+    // Designates an event indicating that an XMPP message in the MUC was
+    // received for total visitor count.
+    TOTAL_VISITOR_COUNT_MESSAGE_RECEIVED = 'xmpp.total_visitor_count_message_received',
+
     // Designates an event indicating that an invite XMPP message in the MUC was
     // received.
     INVITE_MESSAGE_RECEIVED = 'xmpp.invite_message_received',
