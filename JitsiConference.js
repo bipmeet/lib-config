@@ -3698,13 +3698,13 @@ JitsiConference.prototype.setSenderVideoConstraint = function(maxFrameHeight) {
  * @returns {JitsiVideoSIPGWSession|Error} Returns null if conference is not
  * initialised and there is no room.
  */
-JitsiConference.prototype.createVideoSIPGWSession = function(sipAddress, displayName) {
+JitsiConference.prototype.createVideoSIPGWSession = function(sipAddress, displayName, sipdialinaddress, devicetype) {
     if (!this.room) {
         return new Error(VideoSIPGWConstants.ERROR_NO_CONNECTION);
     }
 
     return this.videoSIPGWHandler
-        .createVideoSIPGWSession(sipAddress, displayName);
+        .createVideoSIPGWSession(sipAddress, displayName, sipdialinaddress, devicetype);
 };
 
 /**
