@@ -28,12 +28,14 @@ export default class JitsiVideoSIPGWSession extends Listenable {
      * that participant.
      * @param {ChatRoom} chatRoom - The chat room this session is bound to.
      */
-    constructor(sipAddress, displayName, chatRoom) {
+    constructor(sipAddress, displayName, chatRoom, sipdialinaddress, devicetype) {
         super();
 
         this.sipAddress = sipAddress;
         this.displayName = displayName;
         this.chatRoom = chatRoom;
+        this.sipdialinaddress = sipdialinaddress;
+        this.devicetype = devicetype;
 
         /*
          * The initial state is undefined. Initial state cannot be STATE_OFF,
@@ -99,7 +101,9 @@ export default class JitsiVideoSIPGWSession extends Listenable {
                 failureReason,
                 oldState,
                 newState: this.state,
-                displayName: this.displayName
+                displayName: this.displayName,
+                sipdialinaddress: this.sipdialinaddress,
+                devicetype: this.devicetype
             }
         );
     }
@@ -133,8 +137,14 @@ export default class JitsiVideoSIPGWSession extends Listenable {
         const attributes = {
             'xmlns': 'http://jitsi.org/protocol/jibri',
             'action': action,
-            sipaddress: this.sipAddress
+            sipaddress: this.sipAddress,
+            devicetype: this.devicetype,
+            displayname: this.displayName
         };
+
+        if (this.sipdialinaddress !== '') {
+            attributes.sipdialinaddress = this.sipdialinaddress;
+        }
 
         attributes.displayname = this.displayName;
 
