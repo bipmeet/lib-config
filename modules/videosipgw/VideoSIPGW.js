@@ -84,7 +84,7 @@ export default class VideoSIPGW {
      * @param {string} displayName - The display name to use.
      * @returns {JitsiVideoSIPGWSession|Error}
      */
-    createVideoSIPGWSession(sipAddress, displayName) {
+    createVideoSIPGWSession(sipAddress, displayName, sipdialinaddress, devicetype) {
         if (this.sessions[sipAddress]) {
             logger.warn('There was already a Video SIP GW session for address',
                 sipAddress);
@@ -93,7 +93,7 @@ export default class VideoSIPGW {
         }
 
         const session = new JitsiVideoSIPGWSession(
-            sipAddress, displayName, this.chatRoom);
+            sipAddress, displayName, this.chatRoom, sipdialinaddress, devicetype);
 
         session.addStateListener(this.sessionStateChangeListener);
 
