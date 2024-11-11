@@ -480,7 +480,9 @@ export default class Moderator extends Listenable {
         if (reservationErr.length) {
             // Trigger error event
             const errorCode = reservationErr.attr('error-code');
+            const sessionIdError = reservationErr.attr('session-id');
             const errorTextNode = $(error).find('>error>text');
+            const roomType = reservationErr.attr('room-type');
             let errorMsg;
 
             if (errorTextNode) {
@@ -489,7 +491,9 @@ export default class Moderator extends Listenable {
             this.eventEmitter.emit(
                 XMPPEvents.RESERVATION_ERROR,
                 errorCode,
-                errorMsg);
+                errorMsg,
+                sessionIdError,
+                roomType);
 
             return;
         }
